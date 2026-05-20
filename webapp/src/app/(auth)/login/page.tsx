@@ -5,7 +5,7 @@ import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { Loader2, MailCheck } from 'lucide-react'
+import { AlertCircle, Loader2, MailCheck } from 'lucide-react'
 
 function LoginForm() {
   const router = useRouter()
@@ -17,19 +17,47 @@ function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null)
+  const [loginError, setLoginError] = useState<string | null>(null)
   const [resendLoading, setResendLoading] = useState(false)
 
   const supabase = createClient()
+
+  async function resendConfirmation(emailToConfirm: string, showSuccess = true) {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: emailToConfirm,
+      options: {
+        emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+      },
+    })
+    if (error) throw error
+    if (showSuccess) toast.success('Bekräftelsemejl skickat! Kolla inkorgen och skräpposten.')
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setUnconfirmedEmail(null)
+    setLoginError(null)
+    const normalizedEmail = email.trim().toLowerCase()
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      const { error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      })
       if (error) {
         if (error.message === 'Email not confirmed') {
-          setUnconfirmedEmail(email)
+          setUnconfirmedEmail(normalizedEmail)
+          try {
+            await resendConfirmation(normalizedEmail, false)
+            toast.success('Vi skickade ett nytt bekräftelsemejl.')
+          } catch {
+            toast.info('Kontot finns, men e-postadressen behöver bekräftas innan du kan logga in.')
+          }
+          return
+        }
+        if (error.message.toLowerCase().includes('invalid login credentials')) {
+          setLoginError('E-post eller lösenord stämmer inte. Om kontot inte finns ännu, registrera dig först. Annars kan du återställa lösenordet.')
           return
         }
         throw error
@@ -47,9 +75,7 @@ function LoginForm() {
     if (!unconfirmedEmail) return
     setResendLoading(true)
     try {
-      const { error } = await supabase.auth.resend({ type: 'signup', email: unconfirmedEmail })
-      if (error) throw error
-      toast.success('Bekräftelsemejl skickat! Kolla din inkorg.')
+      await resendConfirmation(unconfirmedEmail)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Kunde inte skicka mejl')
     } finally {
@@ -112,7 +138,10 @@ function LoginForm() {
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value)
+                setLoginError(null)
+              }}
               required
               placeholder="din@email.com"
               className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-600"
@@ -128,12 +157,32 @@ function LoginForm() {
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value)
+                setLoginError(null)
+              }}
               required
               placeholder="••••••••"
               className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-600"
             />
           </div>
+          {loginError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm">
+              <div className="mb-2 flex items-center gap-2 font-medium text-red-800">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                Inloggningen fungerade inte
+              </div>
+              <p className="mb-3 text-red-700">{loginError}</p>
+              <div className="flex flex-wrap gap-3">
+                <Link href="/register" className="font-medium text-red-800 underline underline-offset-2">
+                  Skapa konto
+                </Link>
+                <Link href="/forgot-password" className="font-medium text-red-800 underline underline-offset-2">
+                  Återställ lösenord
+                </Link>
+              </div>
+            </div>
+          )}
           {unconfirmedEmail && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
               <div className="mb-2 flex items-center gap-2 font-medium text-amber-800">

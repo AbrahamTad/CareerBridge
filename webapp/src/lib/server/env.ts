@@ -1,16 +1,40 @@
 import fs from 'fs'
 import path from 'path'
 
-export type AIProvider = 'openai' | 'anthropic' | 'gpt-sw3'
+export type AIProvider =
+  | 'openai'
+  | 'deepseek'
+  | 'aisweden'
+  | 'groq'
+  | 'openrouter'
+  | 'huggingface'
+  | 'anthropic'
+  | 'ollama'
 
 const AI_ENV_NAMES = new Set([
   'AI_PROVIDER',
   'OPENAI_API_KEY',
   'OPENAI_MODEL',
+  'DEEPSEEK_API_KEY',
+  'DEEPSEEK_MODEL',
+  'GROQ_API_KEY',
+  'GROQ_MODEL',
+  'OPENROUTER_API_KEY',
+  'OPENROUTER_MODEL',
   'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'AI_SWEDEN_API_KEY',
+  'AI_SWEDEN_MODEL',
+  'AI_SWEDEN_BASE_URL',
+  'HUGGINGFACE_API_KEY',
+  'AI_PROVIDER_TIMEOUT_MS',
   'HUGGINGFACE_API_TOKEN',
+  'HUGGINGFACE_MODEL',
   'GPT_SW3_MODEL',
   'GPT_SW3_ENDPOINT',
+  'OLLAMA_BASE_URL',
+  'OLLAMA_MODEL',
+  'OLLAMA_TIMEOUT_MS',
 ])
 
 function parseEnvFile(filePath: string): Record<string, string> {
@@ -62,12 +86,25 @@ export function getSelectedAIProvider(): AIProvider {
 export function getConfiguredAIProvider(): AIProvider | undefined {
   const configured = readEnv('AI_PROVIDER').toLowerCase()
 
-  if (configured === 'openai' || configured === 'anthropic' || configured === 'gpt-sw3') {
+  if (configured === 'gpt-sw3') {
+    return 'aisweden'
+  }
+
+  if (
+    configured === 'openai' ||
+    configured === 'deepseek' ||
+    configured === 'aisweden' ||
+    configured === 'groq' ||
+    configured === 'openrouter' ||
+    configured === 'huggingface' ||
+    configured === 'anthropic' ||
+    configured === 'ollama'
+  ) {
     return configured
   }
 
   if (configured) {
-    throw new Error('AI_PROVIDER must be "openai", "gpt-sw3", or "anthropic".')
+    throw new Error('AI_PROVIDER must be a supported CareerBridge AI provider.')
   }
 
   return undefined
@@ -76,11 +113,19 @@ export function getConfiguredAIProvider(): AIProvider | undefined {
 export function getAIProviderKey(provider: AIProvider): string {
   const envName =
     provider === 'openai' ? 'OPENAI_API_KEY'
-    : provider === 'gpt-sw3' ? 'HUGGINGFACE_API_TOKEN'
-    : 'ANTHROPIC_API_KEY'
+    : provider === 'deepseek' ? 'DEEPSEEK_API_KEY'
+    : provider === 'aisweden' ? 'AI_SWEDEN_API_KEY'
+    : provider === 'groq' ? 'GROQ_API_KEY'
+    : provider === 'openrouter' ? 'OPENROUTER_API_KEY'
+    : provider === 'huggingface' ? 'HUGGINGFACE_API_KEY'
+    : provider === 'anthropic' ? 'ANTHROPIC_API_KEY'
+    : ''
+  if (!envName) return ''
   const key = readEnv(envName)
 
   if (!key) {
+    const legacyKey = provider === 'huggingface' ? readEnv('HUGGINGFACE_API_TOKEN') : ''
+    if (legacyKey) return legacyKey
     throw new Error(`Missing ${envName}.`)
   }
 

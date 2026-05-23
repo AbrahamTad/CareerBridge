@@ -1,55 +1,18 @@
+import { cleanCvMarkdown, removeInternalCvSections } from './cv-export-format'
+
 type DocumentBlock =
   | { type: 'heading'; text: string; level: number }
   | { type: 'paragraph'; text: string }
   | { type: 'bullet'; text: string }
   | { type: 'blank' }
 
+type DocumentRenderOptions = {
+  includeTitle?: boolean
+  variant?: 'default' | 'cv'
+}
+
 function removeTailoringNotes(markdown: string): string {
-  const lines = markdown.replace(/\r\n/g, '\n').split('\n')
-  const cleaned: string[] = []
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index]
-    const normalized = line
-      .replace(/^#{1,6}\s*/, '')
-      .replace(/\*\*/g, '')
-      .trim()
-      .toLowerCase()
-
-    const isTailoringHeading =
-      normalized === 'anpassning för rollen' ||
-      normalized === 'tailoring for this role' ||
-      normalized === 'role tailoring' ||
-      normalized === 'anpassning'
-
-    if (!isTailoringHeading) {
-      cleaned.push(line)
-      continue
-    }
-
-    index += 1
-    while (index < lines.length) {
-      const nextLine = lines[index]
-      const trimmed = nextLine.trim()
-      const isBullet = /^[-*•]\s+/.test(trimmed)
-      const isBlank = trimmed.length === 0
-      const isNextHeading = /^#{1,6}\s+/.test(trimmed) || /^\*\*[^*]+\*\*$/.test(trimmed)
-
-      if (!isBullet && !isBlank && isNextHeading) {
-        index -= 1
-        break
-      }
-
-      if (!isBullet && !isBlank && cleaned.length > 0) {
-        index -= 1
-        break
-      }
-
-      index += 1
-    }
-  }
-
-  return cleaned.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+  return removeInternalCvSections(markdown)
 }
 
 export function markdownToPlainText(markdown: string): string {
@@ -100,8 +63,10 @@ function downloadBlob(content: BlobPart, mimeType: string, fileName: string) {
   URL.revokeObjectURL(url)
 }
 
-function parseMarkdown(markdown: string): DocumentBlock[] {
-  return removeTailoringNotes(markdown)
+function parseMarkdown(markdown: string, options: DocumentRenderOptions = {}): DocumentBlock[] {
+  const source = options.variant === 'cv' ? cleanCvMarkdown(markdown) : removeTailoringNotes(markdown)
+
+  return source
     .replace(/\r\n/g, '\n')
     .split('\n')
     .map((rawLine): DocumentBlock => {
@@ -139,8 +104,9 @@ function markdownToInlineText(text: string): string {
     .trim()
 }
 
-function renderHtmlDocument(markdown: string, title: string): string {
-  const blocks = parseMarkdown(markdown)
+function renderHtmlDocument(markdown: string, title: string, options: DocumentRenderOptions = {}): string {
+  const isCv = options.variant === 'cv'
+  const blocks = parseMarkdown(markdown, options)
   const body = blocks
     .map((block) => {
       if (block.type === 'blank') return '<div class="spacer"></div>'
@@ -162,36 +128,38 @@ function renderHtmlDocument(markdown: string, title: string): string {
     body {
       color: #111827;
       font-family: Aptos, Calibri, Arial, sans-serif;
-      font-size: 11pt;
-      line-height: 1.45;
-      margin: 34px 46px;
+      font-size: ${isCv ? '10.5pt' : '11pt'};
+      line-height: ${isCv ? '1.36' : '1.45'};
+      margin: ${isCv ? '30px 42px' : '34px 46px'};
     }
     h1 {
-      border-bottom: 2px solid #2563eb;
+      border-bottom: ${isCv ? '1px solid #cbd5e1' : '2px solid #2563eb'};
       color: #0f172a;
-      font-size: 22pt;
-      margin: 0 0 14px;
+      font-size: ${isCv ? '24pt' : '22pt'};
+      margin: 0 0 ${isCv ? '8px' : '14px'};
       padding-bottom: 8px;
     }
     h2 {
-      color: #1e3a8a;
-      font-size: 14pt;
-      margin: 18px 0 7px;
+      border-top: ${isCv ? '1px solid #e5e7eb' : '0'};
+      color: ${isCv ? '#0f172a' : '#1e3a8a'};
+      font-size: ${isCv ? '11.5pt' : '14pt'};
+      margin: ${isCv ? '14px 0 6px' : '18px 0 7px'};
+      padding-top: ${isCv ? '9px' : '0'};
       text-transform: uppercase;
     }
     h3 {
       color: #0f172a;
-      font-size: 12pt;
-      margin: 13px 0 5px;
+      font-size: ${isCv ? '10.8pt' : '12pt'};
+      margin: ${isCv ? '9px 0 4px' : '13px 0 5px'};
     }
     p {
-      margin: 0 0 7px;
+      margin: 0 0 ${isCv ? '5px' : '7px'};
     }
     .bullet {
-      margin-left: 16px;
+      margin-left: ${isCv ? '13px' : '16px'};
     }
     .spacer {
-      height: 8px;
+      height: ${isCv ? '5px' : '8px'};
     }
   </style>
 </head>
@@ -233,12 +201,13 @@ function wrapText(text: string, maxChars: number): string[] {
   return lines.length ? lines : ['']
 }
 
-function createPdf(markdown: string, title: string): Uint8Array {
+function createPdf(markdown: string, title: string, options: DocumentRenderOptions = {}): Uint8Array {
   const pageWidth = 595
   const pageHeight = 842
-  const marginX = 54
-  const marginTop = 58
-  const marginBottom = 54
+  const isCv = options.variant === 'cv'
+  const marginX = isCv ? 44 : 54
+  const marginTop = isCv ? 42 : 58
+  const marginBottom = isCv ? 42 : 54
   const maxWidth = pageWidth - marginX * 2
   const pages: string[] = []
   let content = ''
@@ -261,28 +230,34 @@ function createPdf(markdown: string, title: string): Uint8Array {
     wrapText(text, maxChars).forEach((line) => addTextLine(line, size, font, indent))
   }
 
-  addWrappedText(title, 20, 'F2')
-  y -= 6
+  if (options.includeTitle !== false) {
+    addWrappedText(title, 20, 'F2')
+    y -= 6
+  }
 
-  for (const block of parseMarkdown(markdown)) {
+  for (const block of parseMarkdown(markdown, options)) {
     if (block.type === 'blank') {
-      y -= 7
+      y -= isCv ? 5 : 7
       continue
     }
 
     if (block.type === 'heading') {
-      y -= block.level === 1 ? 10 : 7
-      addWrappedText(block.text, block.level === 1 ? 18 : block.level === 2 ? 14 : 12, 'F2')
-      y -= 2
+      y -= block.level === 1 ? (isCv ? 4 : 10) : (isCv ? 6 : 7)
+      const text = isCv && block.level === 2 ? block.text.toUpperCase() : block.text
+      const size = isCv
+        ? block.level === 1 ? 21 : block.level === 2 ? 11.5 : 10.8
+        : block.level === 1 ? 18 : block.level === 2 ? 14 : 12
+      addWrappedText(text, size, 'F2')
+      y -= isCv ? 1 : 2
       continue
     }
 
     if (block.type === 'bullet') {
-      addWrappedText(`• ${block.text}`, 10.5, 'F1', 14)
+      addWrappedText(`• ${block.text}`, isCv ? 9.6 : 10.5, 'F1', isCv ? 12 : 14)
       continue
     }
 
-    addWrappedText(block.text, 10.5, 'F1')
+    addWrappedText(block.text, isCv ? 9.8 : 10.5, 'F1')
   }
 
   addPage()
@@ -330,16 +305,20 @@ export function downloadCleanText(markdown: string, title: string) {
   )
 }
 
-export function downloadCleanWordDocument(markdown: string, title: string) {
+export function downloadCleanWordDocument(
+  markdown: string,
+  title: string,
+  options: DocumentRenderOptions = {},
+) {
   downloadBlob(
-    renderHtmlDocument(markdown, title),
+    renderHtmlDocument(markdown, title, options),
     'application/msword;charset=utf-8',
     createFileName(title, 'doc'),
   )
 }
 
-export function downloadCleanPdf(markdown: string, title: string) {
-  const pdf = createPdf(markdown, title)
+export function downloadCleanPdf(markdown: string, title: string, options: DocumentRenderOptions = {}) {
+  const pdf = createPdf(markdown, title, options)
   const pdfBytes = pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength) as ArrayBuffer
   downloadBlob(pdfBytes, 'application/pdf', createFileName(title, 'pdf'))
   return true

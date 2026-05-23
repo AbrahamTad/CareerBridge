@@ -14,6 +14,7 @@ import {
   exportCleanPdf,
   markdownToPlainText,
 } from '@/lib/document-actions'
+import { cleanCvMarkdown } from '@/lib/cv-export-format'
 
 interface JobListing {
   id: string
@@ -357,25 +358,30 @@ export default function JobsPage() {
 
   async function copyAdaptedCV() {
     if (!adaptedCV) return
-    await copyCleanText(adaptedCV.content)
+    await copyCleanText(cleanCvMarkdown(adaptedCV.content))
     toast.success('CV kopierat som ren text')
   }
 
   function exportAdaptedCV() {
     if (!adaptedCV) return
-    exportCleanPdf(adaptedCV.content, `Anpassat CV - ${adaptedCV.jobTitle}`)
+    exportCleanPdf(cleanCvMarkdown(adaptedCV.content), `CV - ${adaptedCV.jobTitle}`, {
+      includeTitle: false,
+      variant: 'cv',
+    })
     toast.success('PDF laddas ner')
   }
 
   function downloadAdaptedCVWord() {
     if (!adaptedCV) return
-    downloadCleanWordDocument(adaptedCV.content, `Anpassat CV - ${adaptedCV.jobTitle}`)
+    downloadCleanWordDocument(cleanCvMarkdown(adaptedCV.content), `CV - ${adaptedCV.jobTitle}`, {
+      variant: 'cv',
+    })
     toast.success('Word-fil laddas ner')
   }
 
   function downloadAdaptedCVText() {
     if (!adaptedCV) return
-    downloadCleanText(adaptedCV.content, `Anpassat CV - ${adaptedCV.jobTitle}`)
+    downloadCleanText(cleanCvMarkdown(adaptedCV.content), `CV - ${adaptedCV.jobTitle}`)
     toast.success('Textfil laddas ner')
   }
 
@@ -684,7 +690,7 @@ export default function JobsPage() {
             />
           ) : (
             <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-4 font-sans text-sm leading-relaxed text-slate-700">
-              {markdownToPlainText(adaptedCV.content)}
+              {markdownToPlainText(cleanCvMarkdown(adaptedCV.content))}
             </pre>
           )}
         </div>

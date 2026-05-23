@@ -2,41 +2,84 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { requireAuth, isAuthResponse } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { adaptCV, canUseLocalAIFallback, getFriendlyAIError } from '@/lib/ai/service'
+import { adaptCV, getFriendlyAIError } from '@/lib/ai/service'
+import { AIProviderError } from '@/lib/ai/types'
+import { cleanCvMarkdown } from '@/lib/cv-export-format'
 import { hasReachedAiLimit } from '@/lib/subscription'
 
-function buildLocalAdaptedCV(cvText: string, jobTitle: string, companyName: string, jobDescription: string) {
-  const cvPreview = cvText.replace(/\s+/g, ' ').trim().slice(0, 1800)
-  const jobKeywords = Array.from(new Set(jobDescription.match(/\b[A-Za-zÅÄÖåäö0-9+#.]{4,}\b/g) ?? []))
-    .slice(0, 12)
-    .join(', ')
+const CV_GENERATION_UNAVAILABLE_MESSAGE =
+  'AI generation is temporarily unavailable. Please add another API key or try again later.'
 
-  // Local fallback keeps export/testing usable when external AI quota is exhausted.
-  return `# Anpassat CV - ${jobTitle}
+const REQUIRED_CV_HEADINGS = ['profil', 'arbetslivserfarenhet', 'utbildning']
 
-## Målroll
-${jobTitle} hos ${companyName}
+const PROVIDER_ERROR_PATTERNS = [
+  /\bAIProviderError\b/i,
+  /\bmissing[_\s-]*(api[_\s-]*key|configuration)\b/i,
+  /\binvalid[_\s-]*api[_\s-]*key\b/i,
+  /\ball[_\s-]*unavailable\b/i,
+  /\binvalid[_\s-]*response\b/i,
+  /\bprovider request failed\b/i,
+  /\brequest could not be sent\b/i,
+  /\bunexpected .*response format\b/i,
+  /\bHTTP\s*429\b/i,
+  /\b429\b.*\b(quota|rate limit|too many requests)\b/i,
+  /\b(quota|rate limit|too many requests)\b/i,
+  /\bOPENAI_API_KEY\b/i,
+  /\bANTHROPIC_API_KEY\b/i,
+  /\bAI_SWEDEN_API_KEY\b/i,
+  /\bHUGGINGFACE_API_KEY\b/i,
+  /\bDEEPSEEK_API_KEY\b/i,
+  /\bGROQ_API_KEY\b/i,
+  /\bOPENROUTER_API_KEY\b/i,
+  /\bOLLAMA_BASE_URL\b/i,
+  /\bOllama is not running\b/i,
+  /\bAI generation is temporarily unavailable\b/i,
+]
 
-## Profil
-Jag söker rollen som ${jobTitle} och lyfter här fram de delar av min bakgrund som bäst matchar annonsen. Jag har praktisk erfarenhet, stark vilja att lära mig och kan snabbt anpassa mig till arbetsplatsens arbetssätt.
+function normalizeHeading(text: string) {
+  return text
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/\*\*/g, '')
+    .replace(/:$/, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/å/g, 'a')
+    .replace(/ä/g, 'a')
+    .replace(/ö/g, 'o')
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .trim()
+    .toLowerCase()
+}
 
-## Relevanta nyckelord från annonsen
-${jobKeywords || 'Se jobbannonsen och kontrollera vilka krav arbetsgivaren prioriterar.'}
+function validateGeneratedCvContent(content: string) {
+  const cleaned = cleanCvMarkdown(content).trim()
+  if (!cleaned) return { valid: false, reason: 'empty content', content: cleaned }
 
-## Utvald CV-information
-${cvPreview}
+  const headings = cleaned
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => /^#{1,6}\s+/.test(line) || /^\*\*[^*]+\*\*:?\s*$/.test(line))
+    .map(normalizeHeading)
 
-## Kontroll innan ansökan
-- Kontrollera att allt ovan stämmer med din faktiska erfarenhet.
-- Lägg till konkreta exempel som matchar ${companyName}s annons.
-- Ta bort delar som inte är relevanta för ${jobTitle}.`
+  const missingHeadings = REQUIRED_CV_HEADINGS.filter((heading) => !headings.includes(heading))
+  if (missingHeadings.length > 0) {
+    return { valid: false, reason: `missing CV sections: ${missingHeadings.join(', ')}`, content: cleaned }
+  }
+
+  const errorPattern = PROVIDER_ERROR_PATTERNS.find((pattern) => pattern.test(cleaned))
+  if (errorPattern) {
+    return { valid: false, reason: `contains provider/error text: ${errorPattern.source}`, content: cleaned }
+  }
+
+  return { valid: true, reason: null, content: cleaned }
 }
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth()
   if (isAuthResponse(auth)) return auth
 
-  const { jobTitle, companyName, jobDescription } = await request.json()
+  const { jobTitle, companyName, jobDescription, language } = await request.json()
+  const outputLanguage = language === 'en' ? 'en' : 'sv'
   if (!jobTitle || !companyName || !jobDescription) {
     return NextResponse.json({ error: 'jobTitle, companyName och jobDescription krävs' }, { status: 400 })
   }
@@ -50,15 +93,27 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const content = await adaptCV(cv.rawText, jobTitle, companyName, jobDescription)
+    const generatedContent = await adaptCV(cv.rawText, jobTitle, companyName, jobDescription, outputLanguage)
+    const validation = validateGeneratedCvContent(generatedContent)
+
+    if (!validation.valid) {
+      console.warn('Generated CV saving cancelled because AI output was invalid', {
+        userId: auth.dbUserId,
+        jobTitle,
+        companyName,
+        reason: validation.reason,
+      })
+      return NextResponse.json({ error: CV_GENERATION_UNAVAILABLE_MESSAGE }, { status: 503 })
+    }
 
     const saved = await prisma.generatedCV.create({
       data: {
         userId: auth.dbUserId,
         title: `${jobTitle} – ${companyName}`,
-        content,
+        content: validation.content,
         jobTitle,
         companyName,
+        language: outputLanguage,
       },
     })
 
@@ -69,21 +124,18 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ content, id: saved.id })
+    return NextResponse.json({ content: validation.content, id: saved.id })
   } catch (err: unknown) {
-    if (canUseLocalAIFallback(err)) {
-      const content = buildLocalAdaptedCV(cv.rawText, jobTitle, companyName, jobDescription)
-      const saved = await prisma.generatedCV.create({
-        data: {
-          userId: auth.dbUserId,
-          title: `${jobTitle} – ${companyName}`,
-          content,
-          jobTitle,
-          companyName,
-        },
+    if (err instanceof AIProviderError) {
+      console.warn('Generated CV saving cancelled because AI providers failed', {
+        userId: auth.dbUserId,
+        jobTitle,
+        companyName,
+        code: err.code,
+        provider: err.provider,
+        status: err.status,
       })
-
-      return NextResponse.json({ content, id: saved.id, fallback: true })
+      return NextResponse.json({ error: CV_GENERATION_UNAVAILABLE_MESSAGE }, { status: 503 })
     }
 
     const { message, status } = getFriendlyAIError(err, 'Generering misslyckades')

@@ -1,55 +1,11 @@
-import { getAIProviderKey, getSelectedAIProvider, type AIProvider } from '@/lib/server/env'
-import { gptSw3Provider } from './gptSw3Provider'
-import { openaiProvider } from './openaiProvider'
-import { AIProviderError, providerLabel, type CompletionRequest, parseProviderError } from './providers'
-
-const ANTHROPIC_VERSION = '2023-06-01'
-const ANTHROPIC_MODEL = 'claude-sonnet-4-6'
-
-function selectedProvider(): AIProvider {
-  try {
-    return getSelectedAIProvider()
-  } catch (error) {
-    throw new AIProviderError(
-      'request_failed',
-      'openai',
-      error instanceof Error ? error.message : 'Invalid AI provider configuration.'
-    )
-  }
-}
-
-function providerKey(provider: AIProvider): string {
-  try {
-    return getAIProviderKey(provider)
-  } catch {
-    const envName =
-      provider === 'openai' ? 'OPENAI_API_KEY'
-      : provider === 'gpt-sw3' ? 'HUGGINGFACE_API_TOKEN'
-      : 'ANTHROPIC_API_KEY'
-    throw new AIProviderError(
-      'missing_api_key',
-      provider,
-      `Missing ${envName}.`
-    )
-  }
-}
-
-function canUseProvider(provider: AIProvider): boolean {
-  try {
-    getAIProviderKey(provider)
-    return true
-  } catch {
-    return false
-  }
-}
+import { completeWithFallback } from './fallback-manager'
+import { detectContentLanguage } from './language-detector'
+import { providerLabel } from './providers/index'
+import { AIProviderError, type CompletionRequest } from './types'
 
 function shouldTryFallback(error: unknown): error is AIProviderError {
   if (!(error instanceof AIProviderError)) return false
-  if (error.provider === 'gpt-sw3' && error.code === 'missing_api_key') return true
-  if (error.code !== 'request_failed') return false
-
-  // Quota/rate-limit, network, and provider-side errors can use the backup provider.
-  return !error.status || error.status === 429 || error.status >= 500
+  return true
 }
 
 function safeLogAIError(error: AIProviderError) {
@@ -67,8 +23,12 @@ export function getFriendlyAIError(error: unknown, fallback = 'AI request failed
 
   safeLogAIError(error)
 
-  if (error.code === 'missing_api_key') {
-    return { message: error.message, status: 500 }
+  if (error.code === 'missing_api_key' || error.code === 'missing_configuration' || error.code === 'all_unavailable') {
+    return { message: 'AI provider temporarily unavailable', status: 503 }
+  }
+
+  if (error.code === 'invalid_response') {
+    return { message: 'AI provider returned an invalid response. Please try again.', status: 502 }
   }
 
   if (error.code === 'invalid_api_key') {
@@ -102,86 +62,15 @@ export function canUseLocalAIFallback(error: unknown) {
   return shouldTryFallback(error)
 }
 
-async function requestAnthropic({ system, user, maxTokens }: CompletionRequest): Promise<string> {
-  const provider = 'anthropic'
-  const apiKey = providerKey(provider)
-  let response: Response
-
-  try {
-    response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify({
-        model: ANTHROPIC_MODEL,
-        max_tokens: maxTokens,
-        system,
-        messages: [{ role: 'user', content: user }],
-      }),
-    })
-  } catch (error) {
-    throw new AIProviderError(
-      'request_failed',
-      provider,
-      error instanceof Error ? error.message : 'Anthropic request could not be sent.'
-    )
-  }
-
-  if (!response.ok) {
-    const message = await parseProviderError(response)
-    throw new AIProviderError(response.status === 401 ? 'invalid_api_key' : 'request_failed', provider, message, response.status)
-  }
-
-  const data = await response.json()
-  const text = data?.content?.find((item: { type?: string }) => item.type === 'text')?.text
-  if (typeof text !== 'string') {
-    throw new AIProviderError('request_failed', provider, 'Unexpected Anthropic response format.')
-  }
-
-  return text
-}
-
-function completeWithProvider(provider: AIProvider, request: CompletionRequest): Promise<string> {
-  if (provider === 'gpt-sw3') return gptSw3Provider(request)
-  if (provider === 'anthropic') return requestAnthropic(request)
-  return openaiProvider(request)
-}
-
 async function complete(request: CompletionRequest): Promise<string> {
-  const preferredProvider = selectedProvider()
-  const providers = [
-    preferredProvider,
-    ...(preferredProvider !== 'openai' && canUseProvider('openai') ? ['openai' as const] : []),
-  ]
-
-  let lastError: unknown
-  for (const provider of providers) {
-    try {
-      // Await here so provider quota/network errors are caught and can fall back cleanly.
-      return await completeWithProvider(provider, request)
-    } catch (error) {
-      lastError = error
-      const canRetryWithNextProvider = provider !== providers[providers.length - 1] && shouldTryFallback(error)
-
-      if (!canRetryWithNextProvider) break
-
-      console.warn('AI provider failed; trying fallback provider', {
-        provider,
-        fallbackProvider: providers[providers.indexOf(provider) + 1],
-        status: error instanceof AIProviderError ? error.status : undefined,
-      })
-    }
-  }
-
-  throw lastError
+  return completeWithFallback(request)
 }
 
 export async function analyzeCV(cvText: string): Promise<string> {
   return complete({
     maxTokens: 2048,
+    task: 'cv-analysis',
+    languageHint: detectContentLanguage(cvText),
     system: `You are an expert CV analyzer covering all Swedish job market sectors: IT/tech, healthcare (vård/omsorg), education (utbildning), trades (yrkesarbeten), transport, and office/economy roles.
 Extract structured information and return ONLY valid JSON:
 {
@@ -206,17 +95,23 @@ Include Swedish job titles in targetRoles — they are critical for Swedish job 
 export async function matchJobToCv(cvText: string, jobDescription: string, jobTitle: string): Promise<string> {
   return complete({
     maxTokens: 2048,
+    task: 'job-match',
+    languageHint: detectContentLanguage(cvText, jobDescription, jobTitle),
     system: `You are an expert career coach and recruiter. Evaluate how well a candidate's CV matches a job description.
 Use clear, natural language. Be specific and practical, not generic or robotic.
 Reason across CV summary, education, real experience, projects, skills, tools, spoken languages, LIA/internship dates, job title, description, explicit requirements, location, remote/on-site preference, employer context, and junior/student suitability.
 Return ONLY a JSON object with:
 {
+  "matchScore": 0-100,
   "score": 0.0-5.0,
   "tier": "strong|medium|weak",
+  "isRecommended": true/false,
+  "matchedSkills": ["specific skills or experience that match"],
   "reason": "one grounded paragraph explaining the match",
   "strengths": ["list of matching strengths"],
   "missingSkills": ["skills the candidate lacks"],
   "recommendations": ["specific human-readable suggestions to improve the application"],
+  "improvementTips": ["specific ways to improve this application"],
   "recommendation": "short final recommendation for whether to apply",
   "cvImprovement": "one concrete way to improve the CV for this job",
   "suggestedCvImprovements": ["2-4 concrete CV edits for this job"],
@@ -224,7 +119,15 @@ Return ONLY a JSON object with:
   "aiSummary": "2-3 natural sentences explaining the match in plain language",
   "aiReasoning": "one grounded paragraph with concrete evidence from the CV and job ad"
 }
-Score guide: 4.5-5.0 = exceptional, 4.0-4.4 = strong, 3.0-3.9 = medium, below 3.0 = weak.`,
+Scoring rules:
+- You must reject unrelated jobs.
+- If the job is not clearly connected to the CV, return matchScore below 50 and isRecommended false.
+- Reject jobs that only share one generic keyword without role, sector, or skill evidence.
+- Understand Swedish recruiter terms, LIA/praktik language, Arbetsformedlingen/Platsbanken phrasing, and Swedish synonyms such as Frontendutvecklare/Webbutvecklare/React Developer and Underskoterska/Vardbitrade/Stodassistent/LSS/BMSS.
+- Do not recommend senior roles to junior/student CVs.
+- Do not recommend healthcare, driver, cleaning, restaurant, or warehouse roles for frontend/IT CVs unless the CV explicitly targets that profession.
+- Do not recommend jobs requiring licenses/certificates the CV does not show.
+Score guide: 90-100 = exceptional, 75-89 = strong, 55-74 = possible, below 55 = not recommended.`,
     user: `Job: ${jobTitle}\n\nJob Description:\n${jobDescription}\n\nCandidate CV:\n${cvText}`,
   })
 }
@@ -243,6 +146,8 @@ export async function generateCoverLetter(
 
   return complete({
     maxTokens: 1024,
+    task: 'cover-letter',
+    languageHint: detectContentLanguage(cvText, jobDescription),
     system: `You are an expert cover letter writer. Create a tailored, honest, and compelling cover letter based only on the candidate's actual experience. ${langInstruction} Tone: ${tone}. Do NOT invent experience or skills not present in the CV.`,
     user: `Write a cover letter for:\nJob: ${jobTitle} at ${companyName}\n\nJob Description:\n${jobDescription}\n\nCandidate CV:\n${cvText}`,
   })
@@ -252,11 +157,18 @@ export async function adaptCV(
   cvText: string,
   jobTitle: string,
   companyName: string,
-  jobDescription: string
+  jobDescription: string,
+  language: 'sv' | 'en' = 'sv'
 ): Promise<string> {
+  const languageInstruction = language === 'sv'
+    ? 'Write the entire CV in Swedish.'
+    : 'Write the entire CV in English.'
+
   return complete({
     maxTokens: 3072,
-    system: `You are a senior CV writer and career coach. Adapt the candidate's CV to the job posting in a warm, natural, human voice.
+    task: 'cv-adapt',
+    languageHint: detectContentLanguage(cvText, jobDescription),
+    system: `You are a senior CV writer and career coach. Adapt the candidate's CV to the job posting in a warm, natural, human voice. ${languageInstruction}
 
 Rules:
 - Keep every claim honest and grounded in the original CV. Do not invent jobs, certificates, education, employers, dates, tools, languages, or metrics.
@@ -265,10 +177,15 @@ Rules:
 - Mirror important words from the job ad only when they genuinely fit the candidate's experience.
 - Reorder and emphasize the most relevant experience for this exact role.
 - Keep the candidate's personality and practical strengths visible.
+- Produce a finished professional CV only, not an AI report or job-match analysis.
+- The first heading must be the candidate's full name, not "Anpassat CV", the job title, or the company name.
+- Put contact information directly below the name.
+- Use this structure only: Profil, Arbetslivserfarenhet, Utbildning, Kompetenser och IT-kunskaper, Språk, Referenser.
+- Use bullet points for responsibilities and achievements under experience.
+- Keep the CV concise enough for 1-2 pages.
 - Remove vague filler such as "dynamic", "passionate", "results-driven", "leveraging", and "proven track record" unless the original CV uses them naturally.
-- If the job ad is Swedish, write the adapted CV in Swedish. If the job ad is English, write it in English.
 - Return only the complete adapted CV in clean markdown.
-- Do not add explanation sections such as "Anpassning för rollen", "Tailoring for this role", notes, comments, or analysis. The output must be ready to send to an employer.`,
+- Do not add explanation sections such as "Målroll", "Relevanta nyckelord från annonsen", "Utvald CV-information", "Kontroll innan ansökan", "Anpassning för rollen", "Tailoring for this role", notes, comments, instructions, or analysis. The output must be ready to send to an employer.`,
     user: `Adapt this CV for: ${jobTitle} at ${companyName}\n\nJob Description:\n${jobDescription}\n\nOriginal CV:\n${cvText}`,
   })
 }
@@ -276,6 +193,8 @@ Rules:
 export async function generateJobSearchQueries(cvText: string): Promise<string> {
   return complete({
     maxTokens: 768,
+    task: 'job-search',
+    languageHint: detectContentLanguage(cvText),
     system: `You are a Swedish job search assistant. Read the candidate's CV and extract search queries for the Swedish job market.
 Return ONLY a JSON object:
 {
@@ -303,6 +222,8 @@ export async function discoverCompanies(
 
   return complete({
     maxTokens: 2048,
+    task: 'company-discovery',
+    languageHint: detectContentLanguage(cvText, targetRole, location),
     system: `You are a company discovery AI helping job seekers find relevant employers. ${context}
 Return a JSON array of companies:
 [{

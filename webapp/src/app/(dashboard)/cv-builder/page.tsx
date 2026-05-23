@@ -10,6 +10,7 @@ import {
   exportCleanPdf,
   markdownToPlainText,
 } from '@/lib/document-actions'
+import { cleanCvMarkdown } from '@/lib/cv-export-format'
 
 export default function CVBuilderPage() {
   const [jobTitle, setJobTitle] = useState('')
@@ -47,25 +48,30 @@ export default function CVBuilderPage() {
 
   async function handleCopy() {
     if (!result) return
-    await copyCleanText(result.content)
+    await copyCleanText(cleanCvMarkdown(result.content))
     toast.success('Kopierat som ren text!')
   }
 
   function handleExportPdf() {
     if (!result) return
-    exportCleanPdf(result.content, `Anpassat CV - ${jobTitle || companyName || 'CareerBridge'}`)
+    exportCleanPdf(cleanCvMarkdown(result.content), `CV - ${jobTitle || companyName || 'CareerBridge'}`, {
+      includeTitle: false,
+      variant: 'cv',
+    })
     toast.success('PDF laddas ner')
   }
 
   function handleDownloadWord() {
     if (!result) return
-    downloadCleanWordDocument(result.content, `Anpassat CV - ${jobTitle || companyName || 'CareerBridge'}`)
+    downloadCleanWordDocument(cleanCvMarkdown(result.content), `CV - ${jobTitle || companyName || 'CareerBridge'}`, {
+      variant: 'cv',
+    })
     toast.success('Word-fil laddas ner')
   }
 
   function handleDownloadText() {
     if (!result) return
-    downloadCleanText(result.content, `Anpassat CV - ${jobTitle || companyName || 'CareerBridge'}`)
+    downloadCleanText(cleanCvMarkdown(result.content), `CV - ${jobTitle || companyName || 'CareerBridge'}`)
     toast.success('Textfil laddas ner')
   }
 
@@ -189,7 +195,7 @@ export default function CVBuilderPage() {
                 />
               ) : (
                 <pre className="whitespace-pre-wrap text-sm text-slate-700 font-sans leading-relaxed max-h-96 overflow-y-auto">
-                  {markdownToPlainText(result.content)}
+                  {markdownToPlainText(cleanCvMarkdown(result.content))}
                 </pre>
               )}
             </div>

@@ -38,7 +38,11 @@ export default function CVBuilderPage() {
       const data = await res.json()
       setResult(data)
       setEditingResult(false)
-      toast.success('CV anpassat!')
+      if (data.fallback) {
+        toast.info(data.message || 'AI är inte tillgängligt. Ett lokalt CV-utkast skapades.')
+      } else {
+        toast.success('CV anpassat!')
+      }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Fel vid generering')
     } finally {

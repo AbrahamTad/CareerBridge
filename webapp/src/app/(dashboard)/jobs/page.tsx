@@ -69,6 +69,14 @@ interface AdaptedCVResult {
   closingAt: string | null
 }
 
+function aiToastMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback
+  if (/failed to fetch|load failed|networkerror/i.test(message)) {
+    return 'AI provider temporarily unavailable'
+  }
+  return message || fallback
+}
+
 export default function JobsPage() {
   const [jobs, setJobs] = useState<JobListing[]>([])
   const [loading, setLoading] = useState(true)
@@ -274,7 +282,7 @@ export default function JobsPage() {
         toast.error('Sökningen tog för lång tid. Prova igen med en specifik roll och stad.')
         return
       }
-      toast.error(err instanceof Error ? err.message : 'Smart sökning misslyckades')
+      toast.error(aiToastMessage(err, 'Smart sökning misslyckades'))
     } finally {
       setSmartSearching(false)
       activeSearch.current = null
@@ -317,7 +325,7 @@ export default function JobsPage() {
         })
       })
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Matchning misslyckades')
+      toast.error(aiToastMessage(err, 'AI provider temporarily unavailable'))
     } finally {
       setMatchingId(null)
     }
@@ -348,9 +356,13 @@ export default function JobsPage() {
         location: job.location,
         closingAt: job.closingAt,
       })
-      toast.success('Anpassat CV klart')
+      if (data.fallback) {
+        toast.info(data.message || 'AI är inte tillgängligt. Ett lokalt CV-utkast skapades.')
+      } else {
+        toast.success('Anpassat CV klart')
+      }
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Kunde inte anpassa CV')
+      toast.error(aiToastMessage(err, 'AI provider temporarily unavailable'))
     } finally {
       setAdaptingId(null)
     }
@@ -787,7 +799,7 @@ export default function JobsPage() {
         <div className="rounded-xl border bg-white py-16 text-center">
           <Sparkles className="mx-auto mb-3 h-10 w-10 text-slate-200" />
           <p className="font-medium text-slate-600">Inga jobb hittade ännu</p>
-          <p className="mt-1 text-sm text-slate-400">Klicka på "Sök med CV" — AI hittar jobb som passar dig</p>
+          <p className="mt-1 text-sm text-slate-400">Klicka på &quot;Sök med CV&quot; — AI hittar jobb som passar dig</p>
           <button
             onClick={() => handleSmartSearch()}
             disabled={smartSearching}

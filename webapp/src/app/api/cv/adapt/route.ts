@@ -5,10 +5,11 @@ import prisma from '@/lib/prisma'
 import { adaptCV, getFriendlyAIError } from '@/lib/ai/service'
 import { AIProviderError } from '@/lib/ai/types'
 import { cleanCvMarkdown } from '@/lib/cv-export-format'
+import { buildLocalAdaptedCv } from '@/lib/cv/local-adapter'
 import { hasReachedAiLimit } from '@/lib/subscription'
 
 const CV_GENERATION_UNAVAILABLE_MESSAGE =
-  'AI generation is temporarily unavailable. Please add another API key or try again later.'
+  'CV generation is temporarily unavailable. Please try again later.'
 
 const REQUIRED_CV_HEADINGS = ['profil', 'arbetslivserfarenhet', 'utbildning']
 
@@ -74,6 +75,29 @@ function validateGeneratedCvContent(content: string) {
   return { valid: true, reason: null, content: cleaned }
 }
 
+async function saveGeneratedCv(data: {
+  userId: string
+  jobTitle: string
+  companyName: string
+  content: string
+  language: 'sv' | 'en'
+}) {
+  return prisma.generatedCV.create({
+    data: {
+      userId: data.userId,
+      title: `${data.jobTitle} – ${data.companyName}`,
+      content: data.content,
+      jobTitle: data.jobTitle,
+      companyName: data.companyName,
+      language: data.language,
+    },
+  })
+}
+
+function buildAndValidateLocalCv(cvText: string, jobTitle: string, companyName: string, jobDescription: string) {
+  return validateGeneratedCvContent(buildLocalAdaptedCv(cvText, jobTitle, companyName, jobDescription))
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireAuth()
   if (isAuthResponse(auth)) return auth
@@ -106,15 +130,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: CV_GENERATION_UNAVAILABLE_MESSAGE }, { status: 503 })
     }
 
-    const saved = await prisma.generatedCV.create({
-      data: {
-        userId: auth.dbUserId,
-        title: `${jobTitle} – ${companyName}`,
-        content: validation.content,
-        jobTitle,
-        companyName,
-        language: outputLanguage,
-      },
+    const saved = await saveGeneratedCv({
+      userId: auth.dbUserId,
+      jobTitle,
+      companyName,
+      content: validation.content,
+      language: outputLanguage,
     })
 
     if (subscription) {
@@ -127,7 +148,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ content: validation.content, id: saved.id })
   } catch (err: unknown) {
     if (err instanceof AIProviderError) {
-      console.warn('Generated CV saving cancelled because AI providers failed', {
+      console.warn('AI CV generation failed; attempting local degraded CV adaptation', {
         userId: auth.dbUserId,
         jobTitle,
         companyName,
@@ -135,7 +156,33 @@ export async function POST(request: NextRequest) {
         provider: err.provider,
         status: err.status,
       })
-      return NextResponse.json({ error: CV_GENERATION_UNAVAILABLE_MESSAGE }, { status: 503 })
+
+      const localValidation = buildAndValidateLocalCv(cv.rawText, jobTitle, companyName, jobDescription)
+      if (!localValidation.valid) {
+        console.warn('Generated CV saving cancelled because local fallback output was invalid', {
+          userId: auth.dbUserId,
+          jobTitle,
+          companyName,
+          reason: localValidation.reason,
+        })
+        return NextResponse.json({ error: CV_GENERATION_UNAVAILABLE_MESSAGE }, { status: 503 })
+      }
+
+      const saved = await saveGeneratedCv({
+        userId: auth.dbUserId,
+        jobTitle,
+        companyName,
+        content: localValidation.content,
+        language: outputLanguage,
+      })
+
+      return NextResponse.json({
+        content: localValidation.content,
+        id: saved.id,
+        fallback: true,
+        degraded: true,
+        message: 'AI providers are unavailable. A local editable CV draft was created from your uploaded CV.',
+      })
     }
 
     const { message, status } = getFriendlyAIError(err, 'Generering misslyckades')

@@ -61,6 +61,13 @@ interface SmartSearchResult {
   jobIds?: string[]
 }
 
+type SmartSearchApiResponse = Partial<SmartSearchResult> & {
+  total?: number | string
+  count?: number | string
+  jobsFound?: number | string
+  matchesFound?: number | string
+}
+
 interface ProfileLocation {
   city?: string | null
   location?: string | null
@@ -85,6 +92,32 @@ function aiToastMessage(error: unknown, fallback: string) {
     return 'AI provider temporarily unavailable'
   }
   return message || fallback
+}
+
+function numberValue(...values: Array<number | string | undefined>) {
+  for (const value of values) {
+    const parsed = typeof value === 'number' ? value : Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return 0
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function normalizeSmartSearchResult(data: SmartSearchApiResponse, fallbackTerm: string): SmartSearchResult {
+  const imported = numberValue(data.imported, data.newJobs, data.count)
+  return {
+    ...data,
+    newJobs: numberValue(data.newJobs, data.count, data.imported),
+    totalFound: numberValue(data.totalFound, data.total, data.jobsFound, data.imported, data.count, data.newJobs),
+    imported,
+    autoMatched: numberValue(data.autoMatched, data.matchesFound),
+    searchedFor: stringArray(data.searchedFor).length ? stringArray(data.searchedFor) : [fallbackTerm || 'CV-profil'],
+    searchedLocations: stringArray(data.searchedLocations),
+    candidateSummary: data.candidateSummary || 'Sökningen är klar.',
+  }
 }
 
 export default function JobsPage() {
@@ -112,6 +145,9 @@ export default function JobsPage() {
   const lastSearchTerms = Array.isArray(lastSmartResult?.searchedFor) && lastSmartResult.searchedFor.length
     ? lastSmartResult.searchedFor.join(', ')
     : query || 'CV-profil'
+  const lastFoundCount = lastSmartResult?.totalFound ?? 0
+  const lastImportedCount = lastSmartResult?.imported ?? lastSmartResult?.newJobs ?? 0
+  const lastMatchedCount = lastSmartResult?.autoMatched ?? 0
 
   const searchSteps = [
     'Läser CV och hittar relevanta roller',
@@ -283,18 +319,19 @@ export default function JobsPage() {
         body: JSON.stringify({ query, location, liaOnly, remoteOnly, useCache: showCached && !options?.deeper }),
         signal: controller.signal,
       })
-      const data = await res.json()
+      const data = await res.json() as SmartSearchApiResponse & { error?: string }
       if (!res.ok) throw new Error(data.error)
+      const result = normalizeSmartSearchResult(data, query)
       setSearchProgress(100)
-      setLastSmartResult(data)
-      if (Array.isArray(data.searchedFor) && data.searchedFor.length) {
-        setGraphSkills(data.searchedFor)
+      setLastSmartResult(result)
+      if (Array.isArray(result.searchedFor) && result.searchedFor.length) {
+        setGraphSkills(result.searchedFor)
       }
-      toast.success(`Hittade ${data.totalFound} jobb, importerade ${data.imported ?? data.newJobs}`)
+      toast.success(`Hittade ${result.totalFound} jobb, importerade ${result.imported ?? result.newJobs}`)
       const params = new URLSearchParams()
       // Load the exact imported jobs first so active filters do not hide fresh AI results.
-      if (Array.isArray(data.jobIds) && data.jobIds.length > 0) {
-        params.set('ids', data.jobIds.join(','))
+      if (Array.isArray(result.jobIds) && result.jobIds.length > 0) {
+        params.set('ids', result.jobIds.join(','))
       } else {
         if (query) params.set('q', query)
         if (location) params.set('location', location)
@@ -571,7 +608,8 @@ export default function JobsPage() {
               <p className="text-sm font-medium text-blue-900">{lastSmartResult.candidateSummary || 'Sökningen är klar.'}</p>
               <p className="mt-1 text-xs text-blue-700">
                 Sökte efter: <span className="font-medium">{lastSearchTerms}</span>
-                {' · '}{lastSmartResult.totalFound} jobb hittade · {lastSmartResult.imported ?? lastSmartResult.newJobs} importerade · {lastSmartResult.autoMatched} AI-matchade
+                {' · '}{lastFoundCount} jobb hittade · {lastImportedCount} importerade
+                {lastMatchedCount > 0 ? ` · ${lastMatchedCount} AI-matchade` : ''}
                 {lastSmartResult.source ? ` · ${lastSmartResult.source}` : ''}
                 {lastSmartResult.searchedLocations?.length ? ` · Områden: ${lastSmartResult.searchedLocations.join(', ')}` : ''}
               </p>

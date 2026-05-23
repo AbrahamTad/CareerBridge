@@ -112,7 +112,7 @@ async function updateTask(taskId: string, data: Prisma.SearchTaskUpdateInput) {
 
 async function findCachedTask(userId: string, queryText: string, location: string) {
   const since = new Date(Date.now() - CACHE_MINUTES * 60 * 1000)
-  return prisma.searchTask.findFirst({
+  const tasks = await prisma.searchTask.findMany({
     where: {
       userId,
       type: 'JOB_SCAN',
@@ -122,7 +122,15 @@ async function findCachedTask(userId: string, queryText: string, location: strin
       updatedAt: { gte: since },
     },
     orderBy: { updatedAt: 'desc' },
+    take: 5,
   })
+
+  return tasks.find((task) => {
+    const results = task.results
+    if (!results || typeof results !== 'object' || Array.isArray(results)) return false
+    const data = results as Record<string, unknown>
+    return Array.isArray(data.searchedFor) || typeof data.candidateSummary === 'string' || typeof data.totalFound === 'number'
+  }) ?? null
 }
 
 export async function POST(request: NextRequest) {

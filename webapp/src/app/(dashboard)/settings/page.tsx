@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Loader2, LogOut, Trash2, Shield } from 'lucide-react'
+import { Activity, Loader2, LogOut, Trash2, Shield } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 export default function SettingsPage() {
@@ -55,6 +56,22 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Inställningar</h1>
         <p className="mt-1 text-slate-500">Hantera konto och säkerhet</p>
+      </div>
+
+      <div className="rounded-xl border bg-white p-6">
+        <div className="mb-3 flex items-center gap-2">
+          <Activity className="h-5 w-5 text-slate-400" />
+          <h2 className="font-semibold text-slate-900">AI-leverantörer</h2>
+        </div>
+        <p className="mb-4 text-sm text-slate-600">
+          Se fallback-status, saknade API-nycklar, svarstider och senaste AI-fel.
+        </p>
+        <Link
+          href="/settings/ai-providers"
+          className="inline-flex rounded-lg border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          Öppna AI-status
+        </Link>
       </div>
 
       {/* Password */}

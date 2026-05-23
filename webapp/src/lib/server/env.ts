@@ -136,3 +136,49 @@ export function getOptionalEnv(name: string): string | undefined {
   const value = readEnv(name)
   return value || undefined
 }
+
+const AI_SETUP_ENV_NAMES = [
+  'OPENAI_API_KEY',
+  'DEEPSEEK_API_KEY',
+  'GROQ_API_KEY',
+  'OPENROUTER_API_KEY',
+  'AI_SWEDEN_API_KEY',
+  'HUGGINGFACE_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'OLLAMA_BASE_URL',
+]
+
+export function getAIEnvironmentDiagnostics() {
+  const missing = AI_SETUP_ENV_NAMES.filter((name) => !getOptionalEnv(name))
+  const configured = AI_SETUP_ENV_NAMES.filter((name) => getOptionalEnv(name))
+
+  return {
+    configured,
+    missing,
+    hasAnyRemoteProvider: configured.some((name) => name.endsWith('_API_KEY')),
+    hasOllama: configured.includes('OLLAMA_BASE_URL'),
+  }
+}
+
+let loggedAIEnvironmentDiagnostics = false
+
+export function logAIEnvironmentDiagnostics() {
+  if (loggedAIEnvironmentDiagnostics) return
+  loggedAIEnvironmentDiagnostics = true
+
+  const diagnostics = getAIEnvironmentDiagnostics()
+  if (diagnostics.missing.length === AI_SETUP_ENV_NAMES.length) {
+    console.warn('No AI providers configured. CV generation will use local degraded mode.', {
+      missing: diagnostics.missing,
+    })
+    return
+  }
+
+  if (diagnostics.missing.length > 0) {
+    console.info('AI provider setup diagnostics', {
+      configured: diagnostics.configured,
+      missing: diagnostics.missing,
+      note: 'Add another provider key to improve fallback resilience.',
+    })
+  }
+}

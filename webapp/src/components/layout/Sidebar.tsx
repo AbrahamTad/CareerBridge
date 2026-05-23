@@ -13,6 +13,7 @@ import {
   Mail,
   Building2,
   Settings,
+  Activity,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -24,6 +25,7 @@ const nav = [
   { href: '/cv-builder', icon: Sparkles, label: 'CV-generator' },
   { href: '/cover-letter', icon: Mail, label: 'Personligt brev' },
   { href: '/companies', icon: Building2, label: 'Företag' },
+  { href: '/settings/ai-providers', icon: Activity, label: 'AI-status' },
   { href: '/settings', icon: Settings, label: 'Inställningar' },
 ]
 

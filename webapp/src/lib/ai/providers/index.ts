@@ -13,23 +13,23 @@ import { parseProviderError } from './utils'
 export const DEFAULT_PROVIDER_PRIORITY: AIProvider[] = [
   'openai',
   'deepseek',
-  'aisweden',
   'groq',
   'openrouter',
+  'aisweden',
   'huggingface',
-  'anthropic',
   'ollama',
+  'anthropic',
 ]
 
 export const SWEDISH_PROVIDER_PRIORITY: AIProvider[] = [
-  'aisweden',
-  'huggingface',
   'openai',
   'deepseek',
   'groq',
   'openrouter',
-  'anthropic',
+  'aisweden',
+  'huggingface',
   'ollama',
+  'anthropic',
 ]
 
 export const providerClients: Record<AIProvider, AIProviderClient> = {

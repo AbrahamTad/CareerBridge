@@ -50,6 +50,14 @@ export interface ProviderHealth {
   configured: boolean
   local: boolean
   responseTimeMs: number
+  status: 'working' | 'warning' | 'unavailable'
+  lastSuccessAt?: string
+  lastErrorAt?: string
+  lastError?: string
+  lastErrorCode?: AIErrorCode
+  lastHttpStatus?: number
+  disabledUntil?: string
+  score: number
   error?: string
 }
 
@@ -65,6 +73,9 @@ export interface AIHealthSummary {
   activeProvider: AIProvider | null
   fallbackProvider: AIProvider | null
   providers: ProviderHealth[]
+  checkedAt: string
+  configuredProviders: number
+  workingProviders: number
 }
 
 export class AIProviderError extends Error {

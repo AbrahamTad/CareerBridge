@@ -1,4 +1,4 @@
-import { getOptionalEnv } from '@/lib/server/env'
+import { getOptionalEnv, logAIEnvironmentDiagnostics } from '@/lib/server/env'
 import { AIProviderError, type AIErrorCode, type AIHealthSummary, type AIProvider, type CompletionRequest, type ProviderHealth } from './types'
 import { getFallbackProvider, getProviderPriority } from './provider-router'
 import { isProviderConfigured, providerClients } from './providers/index'
@@ -7,6 +7,15 @@ const DEFAULT_TIMEOUT_MS = 20_000
 const DEFAULT_LOCAL_TIMEOUT_MS = 4_000
 const DEFAULT_HEALTH_TIMEOUT_MS = 2_500
 const MAX_ATTEMPTS_PER_PROVIDER = 2
+const providerState = new Map<AIProvider, {
+  lastSuccessAt?: string
+  lastErrorAt?: string
+  lastError?: string
+  lastErrorCode?: AIErrorCode
+  lastHttpStatus?: number
+  lastResponseTimeMs?: number
+  disabledUntil?: string
+}>()
 
 function timeoutMs() {
   return Number(getOptionalEnv('AI_PROVIDER_TIMEOUT_MS')) || DEFAULT_TIMEOUT_MS
@@ -65,6 +74,54 @@ function logProviderAttempt(
   else console.warn('AI provider request failed', payload)
 }
 
+function recordProviderAttempt(
+  provider: AIProvider,
+  status: 'success' | 'failed' | 'skipped',
+  responseTimeMs: number,
+  error?: unknown
+) {
+  const current = providerState.get(provider) ?? {}
+  const providerError = error instanceof AIProviderError ? error : undefined
+
+  if (status === 'success') {
+    providerState.set(provider, {
+      ...current,
+      lastSuccessAt: new Date().toISOString(),
+      lastResponseTimeMs: responseTimeMs,
+      disabledUntil: undefined,
+    })
+    return
+  }
+
+  const disabledMs =
+    providerError?.status === 429 ? 120_000
+    : providerError?.code === 'timeout' ? 60_000
+    : providerError?.provider === 'ollama' && providerError.code === 'request_failed' ? 60_000
+    : 0
+
+  providerState.set(provider, {
+    ...current,
+    lastErrorAt: new Date().toISOString(),
+    lastError: error instanceof Error ? error.message : String(error ?? 'Provider unavailable'),
+    lastErrorCode: providerError?.code,
+    lastHttpStatus: providerError?.status,
+    lastResponseTimeMs: responseTimeMs,
+    disabledUntil: disabledMs > 0 ? new Date(Date.now() + disabledMs).toISOString() : current.disabledUntil,
+  })
+}
+
+function getDisabledUntil(provider: AIProvider) {
+  const disabledUntil = providerState.get(provider)?.disabledUntil
+  if (!disabledUntil) return null
+
+  if (new Date(disabledUntil).getTime() <= Date.now()) {
+    providerState.set(provider, { ...(providerState.get(provider) ?? {}), disabledUntil: undefined })
+    return null
+  }
+
+  return disabledUntil
+}
+
 async function withTimeout<T>(callback: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), ms)
@@ -76,6 +133,7 @@ async function withTimeout<T>(callback: (signal: AbortSignal) => Promise<T>, ms:
 }
 
 export async function completeWithProviderFallback(request: CompletionRequest): Promise<string> {
+  logAIEnvironmentDiagnostics()
   const providers = getProviderPriority(request)
   let lastError: unknown
   let skipped = 0
@@ -83,10 +141,20 @@ export async function completeWithProviderFallback(request: CompletionRequest): 
 
   for (const provider of providers) {
     const client = providerClients[provider]
+    const disabledUntil = getDisabledUntil(provider)
+    if (disabledUntil) {
+      const error = new AIProviderError('request_failed', provider, `Provider temporarily disabled until ${disabledUntil}.`)
+      skipped += 1
+      recordProviderAttempt(provider, 'skipped', 0, error)
+      logProviderAttempt(provider, 'skipped', Date.now(), error)
+      continue
+    }
+
     if (!isProviderConfigured(provider)) {
       const error = new AIProviderError(missingConfigurationCode(provider), provider, `Missing ${client.envKey}.`)
       lastError = error
       skipped += 1
+      recordProviderAttempt(provider, 'skipped', 0, error)
       logProviderAttempt(provider, 'skipped', Date.now(), error)
       continue
     }
@@ -103,6 +171,8 @@ export async function completeWithProviderFallback(request: CompletionRequest): 
         if (!trimmedContent) {
           throw new AIProviderError('invalid_response', provider, `${client.name} returned an empty response.`)
         }
+        const responseTimeMs = Date.now() - startedAt
+        recordProviderAttempt(provider, 'success', responseTimeMs)
         logProviderAttempt(provider, 'success', startedAt, undefined, attempt)
         console.info('AI provider fallback selected provider', {
           provider,
@@ -114,6 +184,7 @@ export async function completeWithProviderFallback(request: CompletionRequest): 
       } catch (error) {
         lastError = error
         failed += 1
+        recordProviderAttempt(provider, 'failed', Date.now() - startedAt, error)
         logProviderAttempt(provider, 'failed', startedAt, error, attempt)
 
         if (attempt < maxAttempts && shouldRetryProvider(error)) continue
@@ -142,8 +213,28 @@ async function providerHealth(provider: AIProvider): Promise<ProviderHealth> {
   const client = providerClients[provider]
   const startedAt = Date.now()
   const configured = isProviderConfigured(provider)
+  const state = providerState.get(provider)
+  const base = {
+    provider,
+    configured,
+    local: client.local === true,
+    lastSuccessAt: state?.lastSuccessAt,
+    lastErrorAt: state?.lastErrorAt,
+    lastError: state?.lastError,
+    lastErrorCode: state?.lastErrorCode,
+    lastHttpStatus: state?.lastHttpStatus,
+    disabledUntil: getDisabledUntil(provider) ?? undefined,
+  }
+
   if (!configured) {
-    return { provider, available: false, configured, local: client.local === true, responseTimeMs: Date.now() - startedAt, error: `Missing ${client.envKey}` }
+    return {
+      ...base,
+      available: false,
+      responseTimeMs: Date.now() - startedAt,
+      status: 'unavailable',
+      score: 0,
+      error: `Missing ${client.envKey}`,
+    }
   }
 
   try {
@@ -151,20 +242,30 @@ async function providerHealth(provider: AIProvider): Promise<ProviderHealth> {
       (signal) => client.healthCheck ? client.healthCheck(signal) : Promise.resolve(true),
       DEFAULT_HEALTH_TIMEOUT_MS
     )
-    return { provider, available, configured, local: client.local === true, responseTimeMs: Date.now() - startedAt }
-  } catch (error) {
+    const responseTimeMs = Date.now() - startedAt
     return {
-      provider,
+      ...base,
+      available,
+      responseTimeMs,
+      status: base.disabledUntil ? 'warning' : available ? 'working' : 'warning',
+      score: base.disabledUntil ? 45 : available ? Math.max(50, 100 - Math.min(50, Math.round(responseTimeMs / 100))) : 35,
+      error: base.disabledUntil ? `Temporarily disabled until ${base.disabledUntil}` : available ? undefined : 'Health check returned unavailable',
+    }
+  } catch (error) {
+    const responseTimeMs = Date.now() - startedAt
+    return {
+      ...base,
       available: false,
-      configured,
-      local: client.local === true,
-      responseTimeMs: Date.now() - startedAt,
+      responseTimeMs,
+      status: 'unavailable',
+      score: 10,
       error: error instanceof Error ? error.message : String(error),
     }
   }
 }
 
 export async function getAIHealth(): Promise<AIHealthSummary> {
+  logAIEnvironmentDiagnostics()
   const providers = await Promise.all(getProviderPriority().map(providerHealth))
   const activeProvider = providers.find((provider) => provider.available)?.provider ?? null
   const fallbackProvider = getFallbackProvider(activeProvider)
@@ -182,5 +283,8 @@ export async function getAIHealth(): Promise<AIHealthSummary> {
     activeProvider,
     fallbackProvider,
     providers,
+    checkedAt: new Date().toISOString(),
+    configuredProviders: providers.filter((provider) => provider.configured).length,
+    workingProviders: providers.filter((provider) => provider.available).length,
   }
 }

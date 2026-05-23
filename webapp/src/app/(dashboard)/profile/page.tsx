@@ -1,166 +1,225 @@
-'use client'
+"use client";
 
-import { useState, useEffect, useCallback } from 'react'
-import { toast } from 'sonner'
-import { Upload, FileText, Loader2, CheckCircle, Trash2, X, Sparkles } from 'lucide-react'
-import { PageHero } from '@/components/ui/ModernShell'
+import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import {
+  Upload,
+  FileText,
+  Loader2,
+  CheckCircle,
+  Trash2,
+  X,
+  Sparkles,
+} from "lucide-react";
+import { PageHero } from "@/components/ui/ModernShell";
 
 export default function ProfilePage() {
-  const [cv, setCv] = useState<{ id: string; fileName?: string | null; rawText: string; createdAt: string } | null>(null)
+  const [cv, setCv] = useState<{
+    id: string;
+    fileName?: string | null;
+    rawText: string;
+    createdAt: string;
+  } | null>(null);
   const [profile, setProfile] = useState<{
-    fullName?: string | null
-    phone?: string | null
-    city?: string | null
-    linkedinUrl?: string | null
-    githubUrl?: string | null
-    targetRoles?: string[]
-    targetSalaryMin?: number | null
-    targetSalaryMax?: number | null
-    workPreference?: string[]
-    jobTypes?: string[]
-    liaEnabled?: boolean
-    liaDate1Start?: string | null
-    liaDate1End?: string | null
-    skills?: string[]
-    bio?: string | null
-  } | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [savingProfile, setSavingProfile] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [dragOver, setDragOver] = useState(false)
-  const [analyzing, setAnalyzing] = useState(false)
-  const [showPastePanel, setShowPastePanel] = useState(false)
-  const [pasteText, setPasteText] = useState('')
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    fullName?: string | null;
+    phone?: string | null;
+    city?: string | null;
+    linkedinUrl?: string | null;
+    githubUrl?: string | null;
+    targetRoles?: string[];
+    targetSalaryMin?: number | null;
+    targetSalaryMax?: number | null;
+    workPreference?: string[];
+    jobTypes?: string[];
+    liaEnabled?: boolean;
+    liaDate1Start?: string | null;
+    liaDate1End?: string | null;
+    skills?: string[];
+    bio?: string | null;
+  } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [dragOver, setDragOver] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [showPastePanel, setShowPastePanel] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const loadData = useCallback(async () => {
-    setLoading(true)
+    setLoading(true);
     try {
       const [cvRes, profileRes] = await Promise.all([
-        fetch('/api/cv'),
-        fetch('/api/profile'),
-      ])
+        fetch("/api/cv"),
+        fetch("/api/profile"),
+      ]);
       if (cvRes.ok) {
-        const data = await cvRes.json()
-        setCv(data.cv)
+        const data = await cvRes.json();
+        setCv(data.cv);
       }
       if (profileRes.ok) {
-        const data = await profileRes.json()
-        setProfile(data.profile ?? {})
+        const data = await profileRes.json();
+        setProfile(data.profile ?? {});
       }
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [])
+  }, []);
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   async function runAnalysis() {
-    setAnalyzing(true)
+    setAnalyzing(true);
     try {
-      const analyzeRes = await fetch('/api/ai/analyze-cv', { method: 'POST' })
+      const analyzeRes = await fetch("/api/ai/analyze-cv", { method: "POST" });
       if (analyzeRes.ok) {
-        toast.success('CV analyserat av AI')
+        toast.success("CV analyserat av AI");
       } else {
-        const errData = await analyzeRes.json().catch(() => ({}))
-        toast.error(errData.error ?? 'AI-analys misslyckades')
+        const errData = await analyzeRes.json().catch(() => ({}));
+        toast.error(errData.error ?? "AI-analys misslyckades");
       }
     } finally {
-      setAnalyzing(false)
+      setAnalyzing(false);
     }
+  }
+
+  function inferMimeType(fileName: string) {
+    const ext = fileName.split(".").pop()?.toLowerCase();
+    if (ext === "pdf") return "application/pdf";
+    if (ext === "docx")
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    if (ext === "doc") return "application/msword";
+    if (ext === "txt") return "text/plain";
+    return null;
   }
 
   async function handleFileUpload(file: File) {
     if (file.size > 5 * 1024 * 1024) {
-      toast.error('Filen är för stor. Max 5 MB.')
-      return
+      toast.error("Filen är för stor. Max 5 MB.");
+      return;
     }
-    const allowed = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
-    if (!allowed.includes(file.type)) {
-      toast.error('Filformat stöds inte. Använd PDF, DOCX eller TXT.')
-      return
+    const mimeType = file.type || inferMimeType(file.name);
+    const allowed = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/msword",
+      "text/plain",
+    ];
+    if (!mimeType || !allowed.includes(mimeType)) {
+      toast.error("Filformat stöds inte. Använd PDF, DOCX, DOC eller TXT.");
+      return;
     }
-    setUploading(true)
-    const formData = new FormData()
-    formData.append('file', file)
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
     try {
-      const res = await fetch('/api/cv', { method: 'POST', body: formData })
-      if (!res.ok) throw new Error((await res.json()).error)
-      toast.success('CV uppladdat!')
-      await loadData()
-      await runAnalysis()
+      const res = await fetch("/api/cv", { method: "POST", body: formData });
+      if (!res.ok) {
+        const errorText = await res.text();
+        let errorMessage = "Uppladdning misslyckades";
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error ?? errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+      toast.success("CV uppladdat!");
+      await loadData();
+      await runAnalysis();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Uppladdning misslyckades')
+      toast.error(
+        err instanceof Error ? err.message : "Uppladdning misslyckades",
+      );
     } finally {
-      setUploading(false)
+      setUploading(false);
     }
   }
 
   async function handlePasteSubmit() {
-    if (!pasteText.trim()) return
-    setUploading(true)
+    if (!pasteText.trim()) return;
+    setUploading(true);
     try {
-      const res = await fetch('/api/cv', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/cv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: pasteText.trim() }),
-      })
-      if (!res.ok) throw new Error((await res.json()).error)
-      toast.success('CV sparat!')
-      setShowPastePanel(false)
-      setPasteText('')
-      await loadData()
-      await runAnalysis()
+      });
+      if (!res.ok) {
+        const errorText = await res.text();
+        let errorMessage = "Kunde inte spara CV";
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error ?? errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+      toast.success("CV sparat!");
+      setShowPastePanel(false);
+      setPasteText("");
+      await loadData();
+      await runAnalysis();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Kunde inte spara CV')
+      toast.error(err instanceof Error ? err.message : "Kunde inte spara CV");
     } finally {
-      setUploading(false)
+      setUploading(false);
     }
   }
 
   async function handleDeleteCV() {
-    const res = await fetch('/api/cv', { method: 'DELETE' })
+    const res = await fetch("/api/cv", { method: "DELETE" });
     if (res.ok) {
-      toast.success('CV borttaget')
-      setCv(null)
-      setShowDeleteConfirm(false)
+      toast.success("CV borttaget");
+      setCv(null);
+      setShowDeleteConfirm(false);
     } else {
-      toast.error('Fel vid borttagning')
+      toast.error("Fel vid borttagning");
     }
   }
 
   async function handleSaveProfile(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSavingProfile(true)
-    const form = new FormData(e.currentTarget)
+    e.preventDefault();
+    setSavingProfile(true);
+    const form = new FormData(e.currentTarget);
     const data = {
-      fullName: form.get('fullName') as string,
-      phone: form.get('phone') as string,
-      city: form.get('city') as string,
-      linkedinUrl: form.get('linkedinUrl') as string,
-      githubUrl: form.get('githubUrl') as string,
-      targetSalaryMin: parseInt(form.get('salaryMin') as string) || null,
-      targetSalaryMax: parseInt(form.get('salaryMax') as string) || null,
-      bio: form.get('bio') as string,
-      liaEnabled: form.get('liaEnabled') === 'on',
-      liaDate1Start: form.get('liaDate1Start') as string || null,
-      liaDate1End: form.get('liaDate1End') as string || null,
-      targetRoles: (form.get('targetRoles') as string).split(',').map(s => s.trim()).filter(Boolean),
-      skills: (form.get('skills') as string).split(',').map(s => s.trim()).filter(Boolean),
-    }
+      fullName: form.get("fullName") as string,
+      phone: form.get("phone") as string,
+      city: form.get("city") as string,
+      linkedinUrl: form.get("linkedinUrl") as string,
+      githubUrl: form.get("githubUrl") as string,
+      targetSalaryMin: parseInt(form.get("salaryMin") as string) || null,
+      targetSalaryMax: parseInt(form.get("salaryMax") as string) || null,
+      bio: form.get("bio") as string,
+      liaEnabled: form.get("liaEnabled") === "on",
+      liaDate1Start: (form.get("liaDate1Start") as string) || null,
+      liaDate1End: (form.get("liaDate1End") as string) || null,
+      targetRoles: (form.get("targetRoles") as string)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      skills: (form.get("skills") as string)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    };
     try {
-      const res = await fetch('/api/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-      })
-      if (!res.ok) throw new Error((await res.json()).error)
-      toast.success('Profil sparad!')
-      setProfile(data)
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast.success("Profil sparad!");
+      setProfile(data);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Fel')
+      toast.error(err instanceof Error ? err.message : "Fel");
     } finally {
-      setSavingProfile(false)
+      setSavingProfile(false);
     }
   }
 
@@ -169,7 +228,7 @@ export default function ProfilePage() {
       <div className="flex items-center justify-center py-24">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
-    )
+    );
   }
 
   return (
@@ -181,7 +240,9 @@ export default function ProfilePage() {
       />
       <div className="hidden">
         <h1 className="text-2xl font-bold text-slate-900">CV & Profil</h1>
-        <p className="mt-1 text-slate-500">Hantera ditt CV och profilinformation</p>
+        <p className="mt-1 text-slate-500">
+          Hantera ditt CV och profilinformation
+        </p>
       </div>
 
       {/* CV Section */}
@@ -197,8 +258,12 @@ export default function ProfilePage() {
                   <CheckCircle className="h-5 w-5 text-green-600" />
                 </div>
                 <div>
-                  <p className="font-medium text-green-900">{cv.fileName ?? 'CV inklistrat'}</p>
-                  <p className="text-xs text-green-600">{cv.rawText.length.toLocaleString()} tecken extraherade</p>
+                  <p className="font-medium text-green-900">
+                    {cv.fileName ?? "CV inklistrat"}
+                  </p>
+                  <p className="text-xs text-green-600">
+                    {cv.rawText.length.toLocaleString()} tecken extraherade
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -207,7 +272,11 @@ export default function ProfilePage() {
                   disabled={analyzing}
                   className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-white px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
                 >
-                  {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  {analyzing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
                   Analysera igen
                 </button>
                 <button
@@ -222,7 +291,9 @@ export default function ProfilePage() {
             {/* Delete confirmation inline */}
             {showDeleteConfirm && (
               <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4">
-                <p className="text-sm font-medium text-red-800">Ta bort CV permanent?</p>
+                <p className="text-sm font-medium text-red-800">
+                  Ta bort CV permanent?
+                </p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setShowDeleteConfirm(false)}
@@ -252,21 +323,40 @@ export default function ProfilePage() {
             {/* Drag & drop zone */}
             {!showPastePanel && (
               <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
                 onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFileUpload(f) }}
-                className={`rounded-xl border-2 border-dashed p-10 text-center transition-colors ${dragOver ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  const f = e.dataTransfer.files[0];
+                  if (f) handleFileUpload(f);
+                }}
+                className={`rounded-xl border-2 border-dashed p-10 text-center transition-colors ${dragOver ? "border-blue-400 bg-blue-50" : "border-slate-200 hover:border-slate-300"}`}
               >
                 <Upload className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-                <p className="mb-1 font-medium text-slate-600">Dra och släpp ditt CV här</p>
-                <p className="mb-5 text-sm text-slate-400">PDF, DOCX eller TXT · Max 5 MB</p>
+                <p className="mb-1 font-medium text-slate-600">
+                  Dra och släpp ditt CV här
+                </p>
+                <p className="mb-5 text-sm text-slate-400">
+                  PDF, DOCX eller TXT · Max 5 MB
+                </p>
                 <label className="cursor-pointer rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
-                  {uploading ? <Loader2 className="inline h-4 w-4 animate-spin" /> : 'Välj fil'}
+                  {uploading ? (
+                    <Loader2 className="inline h-4 w-4 animate-spin" />
+                  ) : (
+                    "Välj fil"
+                  )}
                   <input
                     type="file"
                     accept=".pdf,.docx,.doc,.txt"
                     className="hidden"
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f) }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleFileUpload(f);
+                    }}
                   />
                 </label>
               </div>
@@ -287,10 +377,15 @@ export default function ProfilePage() {
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-blue-600" />
-                    <p className="text-sm font-semibold text-slate-800">Klistra in ditt CV</p>
+                    <p className="text-sm font-semibold text-slate-800">
+                      Klistra in ditt CV
+                    </p>
                   </div>
                   <button
-                    onClick={() => { setShowPastePanel(false); setPasteText('') }}
+                    onClick={() => {
+                      setShowPastePanel(false);
+                      setPasteText("");
+                    }}
                     className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
                   >
                     <X className="h-4 w-4" />
@@ -305,10 +400,15 @@ export default function ProfilePage() {
                   className="w-full rounded-lg border bg-white px-4 py-3 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
                 <div className="mt-3 flex items-center justify-between">
-                  <p className="text-xs text-slate-400">{pasteText.length.toLocaleString()} tecken</p>
+                  <p className="text-xs text-slate-400">
+                    {pasteText.length.toLocaleString()} tecken
+                  </p>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => { setShowPastePanel(false); setPasteText('') }}
+                      onClick={() => {
+                        setShowPastePanel(false);
+                        setPasteText("");
+                      }}
                       className="rounded-lg border px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
                     >
                       Avbryt
@@ -318,7 +418,9 @@ export default function ProfilePage() {
                       disabled={uploading || pasteText.trim().length < 50}
                       className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                     >
-                      {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {uploading && (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      )}
                       Spara & analysera
                     </button>
                   </div>
@@ -339,69 +441,165 @@ export default function ProfilePage() {
       {/* Profile Form */}
       <div className="rounded-xl border border-white/70 bg-white/80 p-6 shadow-sm backdrop-blur">
         {/* Profile fields feed the matching model with location, LIA, and skill context. */}
-        <h2 className="mb-6 text-lg font-semibold text-slate-900">Profilinformation</h2>
+        <h2 className="mb-6 text-lg font-semibold text-slate-900">
+          Profilinformation
+        </h2>
         <form onSubmit={handleSaveProfile} className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Namn</label>
-              <input name="fullName" defaultValue={profile?.fullName ?? ''} className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="Förnamn Efternamn" />
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Namn
+              </label>
+              <input
+                name="fullName"
+                defaultValue={profile?.fullName ?? ""}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                placeholder="Förnamn Efternamn"
+              />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Telefon</label>
-              <input name="phone" defaultValue={profile?.phone ?? ''} className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="+46 70 000 00 00" />
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Telefon
+              </label>
+              <input
+                name="phone"
+                defaultValue={profile?.phone ?? ""}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                placeholder="+46 70 000 00 00"
+              />
             </div>
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Stad</label>
-            <input name="city" defaultValue={profile?.city ?? ''} className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="Göteborg" />
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Stad
+            </label>
+            <input
+              name="city"
+              defaultValue={profile?.city ?? ""}
+              className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              placeholder="Göteborg"
+            />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">LinkedIn</label>
-              <input name="linkedinUrl" defaultValue={profile?.linkedinUrl ?? ''} className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="linkedin.com/in/..." />
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                LinkedIn
+              </label>
+              <input
+                name="linkedinUrl"
+                defaultValue={profile?.linkedinUrl ?? ""}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                placeholder="linkedin.com/in/..."
+              />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">GitHub</label>
-              <input name="githubUrl" defaultValue={profile?.githubUrl ?? ''} className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="github.com/..." />
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                GitHub
+              </label>
+              <input
+                name="githubUrl"
+                defaultValue={profile?.githubUrl ?? ""}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                placeholder="github.com/..."
+              />
             </div>
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Önskade roller (kommaseparerade)</label>
-            <input name="targetRoles" defaultValue={profile?.targetRoles?.join(', ') ?? ''} className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="Frontend Developer, QA Engineer" />
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Önskade roller (kommaseparerade)
+            </label>
+            <input
+              name="targetRoles"
+              defaultValue={profile?.targetRoles?.join(", ") ?? ""}
+              className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              placeholder="Frontend Developer, QA Engineer"
+            />
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Kompetenser (kommaseparerade)</label>
-            <input name="skills" defaultValue={profile?.skills?.join(', ') ?? ''} className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="React, TypeScript, Python" />
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Kompetenser (kommaseparerade)
+            </label>
+            <input
+              name="skills"
+              defaultValue={profile?.skills?.join(", ") ?? ""}
+              className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              placeholder="React, TypeScript, Python"
+            />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Lägsta lön (SEK/mån)</label>
-              <input name="salaryMin" type="number" defaultValue={profile?.targetSalaryMin ?? ''} className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="35000" />
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Lägsta lön (SEK/mån)
+              </label>
+              <input
+                name="salaryMin"
+                type="number"
+                defaultValue={profile?.targetSalaryMin ?? ""}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                placeholder="35000"
+              />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Högsta lön (SEK/mån)</label>
-              <input name="salaryMax" type="number" defaultValue={profile?.targetSalaryMax ?? ''} className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="45000" />
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Högsta lön (SEK/mån)
+              </label>
+              <input
+                name="salaryMax"
+                type="number"
+                defaultValue={profile?.targetSalaryMax ?? ""}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                placeholder="45000"
+              />
             </div>
           </div>
           <div>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input name="liaEnabled" type="checkbox" defaultChecked={profile?.liaEnabled ?? false} className="rounded" />
-              <span className="text-sm font-medium text-slate-700">Jag söker LIA-plats</span>
+              <input
+                name="liaEnabled"
+                type="checkbox"
+                defaultChecked={profile?.liaEnabled ?? false}
+                className="rounded"
+              />
+              <span className="text-sm font-medium text-slate-700">
+                Jag söker LIA-plats
+              </span>
             </label>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">LIA 1 start</label>
-              <input name="liaDate1Start" type="date" defaultValue={profile?.liaDate1Start?.slice(0, 10) ?? ''} className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" />
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                LIA 1 start
+              </label>
+              <input
+                name="liaDate1Start"
+                type="date"
+                defaultValue={profile?.liaDate1Start?.slice(0, 10) ?? ""}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">LIA 1 slut</label>
-              <input name="liaDate1End" type="date" defaultValue={profile?.liaDate1End?.slice(0, 10) ?? ''} className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" />
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                LIA 1 slut
+              </label>
+              <input
+                name="liaDate1End"
+                type="date"
+                defaultValue={profile?.liaDate1End?.slice(0, 10) ?? ""}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              />
             </div>
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Om dig (kort bio)</label>
-            <textarea name="bio" rows={3} defaultValue={profile?.bio ?? ''} className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="Berätta kort om dig själv och vad du söker..." />
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Om dig (kort bio)
+            </label>
+            <textarea
+              name="bio"
+              rows={3}
+              defaultValue={profile?.bio ?? ""}
+              className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              placeholder="Berätta kort om dig själv och vad du söker..."
+            />
           </div>
           <button
             type="submit"
@@ -414,5 +612,5 @@ export default function ProfilePage() {
         </form>
       </div>
     </div>
-  )
+  );
 }

@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { matchJobToCv } from './service'
+import { scoreCvAgainstJob, type RelevanceScore } from './relevanceScorer'
 
 type MatchTier = 'strong' | 'medium' | 'weak'
 
@@ -8,7 +9,10 @@ type MatchableJob = Prisma.JobListingGetPayload<{ include: { company: true } }>
 
 export interface JobMatchAnalysis {
   score: number
+  matchScore: number
   tier: MatchTier
+  isRecommended: boolean
+  matchedSkills: string[]
   reason: string
   strengths: string[]
   missingSkills: string[]
@@ -19,6 +23,7 @@ export interface JobMatchAnalysis {
   coverLetterAngle: string
   aiSummary: string
   aiReasoning: string
+  improvementTips: string[]
   source?: string
 }
 
@@ -43,7 +48,9 @@ function tierFromScore(score: number): MatchTier {
 }
 
 function normalizeAnalysis(value: Record<string, unknown>): JobMatchAnalysis {
-  const score = clampScore(value.score)
+  const rawMatchScore = typeof value.matchScore === 'number' ? value.matchScore : Number(value.matchScore)
+  const score = Number.isFinite(rawMatchScore) ? Math.max(0, Math.min(5, rawMatchScore / 20)) : clampScore(value.score)
+  const matchScore = Math.round(score * 20)
   const tier = value.tier === 'strong' || value.tier === 'medium' || value.tier === 'weak'
     ? value.tier
     : tierFromScore(score)
@@ -59,7 +66,10 @@ function normalizeAnalysis(value: Record<string, unknown>): JobMatchAnalysis {
 
   return {
     score,
+    matchScore,
     tier,
+    isRecommended: value.isRecommended === false ? false : matchScore >= 55,
+    matchedSkills: asStringArray(value.matchedSkills).length ? asStringArray(value.matchedSkills) : asStringArray(value.strengths),
     reason,
     strengths: asStringArray(value.strengths),
     missingSkills: asStringArray(value.missingSkills),
@@ -72,6 +82,7 @@ function normalizeAnalysis(value: Record<string, unknown>): JobMatchAnalysis {
     coverLetterAngle: typeof value.coverLetterAngle === 'string' ? value.coverLetterAngle : 'Koppla motivationen till rollen och arbetsgivarens behov.',
     aiSummary: typeof value.aiSummary === 'string' ? value.aiSummary : reason,
     aiReasoning: reason,
+    improvementTips: asStringArray(value.improvementTips).length ? asStringArray(value.improvementTips) : recommendations,
     source: typeof value.source === 'string' ? value.source : 'ai-provider',
   }
 }
@@ -91,7 +102,10 @@ export function buildLocalMatch(jobTitle: string, jobDescription: string): JobMa
 
   return {
     score: senior ? 2.8 : 3.6,
+    matchScore: senior ? 56 : 72,
     tier: 'medium',
+    isRecommended: !senior,
+    matchedSkills: strengths,
     reason: 'Extern AI var inte tillgänglig, så detta är en konservativ lokal matchning.',
     strengths,
     missingSkills: ['Kontrollera annonsens måste-krav manuellt.'],
@@ -102,7 +116,53 @@ export function buildLocalMatch(jobTitle: string, jobDescription: string): JobMa
     coverLetterAngle: 'Fokusera på motivation, lärande och praktisk erfarenhet kopplad till rollen.',
     aiSummary: 'Extern AI var inte tillgänglig, så detta är en konservativ lokal matchning.',
     aiReasoning: 'Matchningen bygger på jobbannonsens text och generella signaler, inte full AI-analys.',
+    improvementTips: ['Granska annonsens krav manuellt innan du ansoker.'],
     source: 'local-fallback',
+  }
+}
+
+function analysisFromRelevance(relevance: RelevanceScore, source = 'deterministic-relevance'): JobMatchAnalysis {
+  return {
+    score: relevance.score,
+    matchScore: relevance.matchScore,
+    tier: relevance.tier,
+    isRecommended: relevance.isRecommended,
+    matchedSkills: relevance.matchedSkills,
+    reason: relevance.reason,
+    strengths: relevance.matchedSkills.length ? relevance.matchedSkills : ['Ingen tydlig stark match hittades.'],
+    missingSkills: relevance.missingSkills,
+    recommendations: relevance.improvementTips,
+    recommendation: relevance.isRecommended ? 'Rekommenderad att granska och eventuellt soka.' : 'Inte rekommenderad for denna CV-profil.',
+    cvImprovement: relevance.improvementTips[0] ?? 'Lyft konkreta bevis som matchar rollen.',
+    suggestedCvImprovements: relevance.improvementTips,
+    coverLetterAngle: relevance.isRecommended
+      ? 'Koppla brevet till matchande kompetenser och rollens viktigaste krav.'
+      : 'Sok hellre roller som ligger narmare CV:ts mal och kompetenser.',
+    aiSummary: relevance.reason,
+    aiReasoning: relevance.reason,
+    improvementTips: relevance.improvementTips,
+    source,
+  }
+}
+
+function mergeAiWithRelevance(ai: JobMatchAnalysis, relevance: RelevanceScore): JobMatchAnalysis {
+  const matchScore = Math.min(relevance.matchScore, ai.matchScore || Math.round(ai.score * 20))
+  const isRecommended = relevance.isRecommended && matchScore >= 55 && ai.isRecommended !== false
+
+  return {
+    ...ai,
+    score: matchScore / 20,
+    matchScore,
+    tier: matchScore >= 75 ? 'strong' : matchScore >= 55 ? 'medium' : 'weak',
+    isRecommended,
+    matchedSkills: relevance.matchedSkills.length ? relevance.matchedSkills : ai.matchedSkills,
+    missingSkills: relevance.missingSkills.length ? relevance.missingSkills : ai.missingSkills,
+    reason: isRecommended ? ai.reason : relevance.reason,
+    strengths: relevance.matchedSkills.length ? relevance.matchedSkills : ai.strengths,
+    recommendations: ai.recommendations.length ? ai.recommendations : relevance.improvementTips,
+    improvementTips: ai.improvementTips.length ? ai.improvementTips : relevance.improvementTips,
+    aiReasoning: `${relevance.reason} ${ai.aiReasoning}`,
+    source: 'deterministic-plus-ai',
   }
 }
 
@@ -125,13 +185,22 @@ function buildCvContext(rawText: string, parsedData: Prisma.JsonValue | null) {
 }
 
 export async function analyzeJobMatch(cv: { rawText: string; parsedData: Prisma.JsonValue | null }, job: MatchableJob) {
+  const relevance = scoreCvAgainstJob(cv.rawText, cv.parsedData, job)
+  if (!relevance.isRecommended) {
+    return analysisFromRelevance(relevance)
+  }
+
   const matchText = await matchJobToCv(
     buildCvContext(cv.rawText, cv.parsedData),
     buildJobContext(job),
     job.title
   )
 
-  return parseMatchAnalysis(matchText)
+  return mergeAiWithRelevance(parseMatchAnalysis(matchText), relevance)
+}
+
+export function buildDeterministicMatch(cv: { rawText: string; parsedData: Prisma.JsonValue | null }, job: MatchableJob) {
+  return analysisFromRelevance(scoreCvAgainstJob(cv.rawText, cv.parsedData, job), 'local-relevance')
 }
 
 export async function saveJobMatch(userId: string, cvId: string, jobListingId: string, analysis: JobMatchAnalysis) {
@@ -139,6 +208,10 @@ export async function saveJobMatch(userId: string, cvId: string, jobListingId: s
     ...analysis,
     reason: analysis.reason,
     suggestedCvImprovements: analysis.suggestedCvImprovements,
+    matchScore: analysis.matchScore,
+    isRecommended: analysis.isRecommended,
+    matchedSkills: analysis.matchedSkills,
+    improvementTips: analysis.improvementTips,
   } as Prisma.InputJsonObject
 
   return prisma.jobMatch.upsert({

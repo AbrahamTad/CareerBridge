@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
 import { analyzeAndSaveJobMatch } from '@/lib/ai/aiMatchingService'
 import { generateJobSearchQueries, getFriendlyAIError } from '@/lib/ai/service'
 import { searchJobTech, uniqueExternalJobs, type ExternalJob } from '@/lib/jobs/jobtech'
+import { expandJobSearchLocations, locationLabelForSearch } from '@/lib/jobs/locations'
 import { persistExternalJobs } from '@/lib/jobs/persist'
 import { verifyActiveJobIds } from '@/lib/jobs/liveness'
 import { hasReachedAiLimit } from '@/lib/subscription'
@@ -226,11 +227,16 @@ export async function POST(request: NextRequest) {
 
   let demoMode = false
   let foundJobs: ExternalJob[] = []
+  const searchLocations = expandJobSearchLocations(location)
+  const expandedLocationSearch = searchLocations.length > 1
+  const sourceCount = searchTerms.length * searchLocations.length
 
   try {
-    await updateTask(searchTask.id, { progress: 46, currentStep: 'Searching job sources', sourcesScanned: searchTerms.length })
+    await updateTask(searchTask.id, { progress: 46, currentStep: 'Searching job sources', sourcesScanned: sourceCount })
     const results = await Promise.allSettled(
-      searchTerms.map((term) => searchJobTech(term, location, 12))
+      searchTerms.flatMap((term) =>
+        searchLocations.map((place) => searchJobTech(term, place, expandedLocationSearch ? 6 : 12))
+      )
     )
     foundJobs = uniqueExternalJobs(results.flatMap((result) => result.status === 'fulfilled' ? result.value : []))
   } catch {
@@ -257,7 +263,7 @@ export async function POST(request: NextRequest) {
     isLia: liaOnly || job.isLia,
   }))
   const { ids: persistedJobIds, newCount } = await persistExternalJobs(externalJobs)
-  const jobIds = demoMode ? persistedJobIds : await verifyActiveJobIds(persistedJobIds)
+  let jobIds = demoMode ? persistedJobIds : await verifyActiveJobIds(persistedJobIds)
 
   await updateTask(searchTask.id, {
     progress: 74,
@@ -267,11 +273,11 @@ export async function POST(request: NextRequest) {
 
   const existingMatches = await prisma.jobMatch.findMany({
     where: { userId: auth.dbUserId, jobListingId: { in: jobIds } },
-    select: { jobListingId: true },
+    select: { jobListingId: true, score: true },
   })
   const matchedIds = new Set(existingMatches.map((match) => match.jobListingId))
   const toMatch = jobIds.filter((jobId) => !matchedIds.has(jobId)).slice(0, MAX_AUTO_MATCHES)
-  let matchedCount = existingMatches.length
+  let matchedCount = existingMatches.filter((match) => match.score >= 2.75).length
 
   await Promise.allSettled(
     toMatch.map(async (jobId) => {
@@ -282,9 +288,8 @@ export async function POST(request: NextRequest) {
       if (!jobListing?.description) return
 
       try {
-        await analyzeAndSaveJobMatch(auth.dbUserId, cv, jobListing)
-
-        matchedCount++
+        const match = await analyzeAndSaveJobMatch(auth.dbUserId, cv, jobListing)
+        if (match.score >= 2.75) matchedCount++
       } catch {
         // A failed AI match should still return the saved job as a partial result.
       }
@@ -298,6 +303,17 @@ export async function POST(request: NextRequest) {
     })
   }
 
+  const recommendedMatches = await prisma.jobMatch.findMany({
+    where: {
+      userId: auth.dbUserId,
+      jobListingId: { in: jobIds },
+      score: { gte: 2.75 },
+    },
+    select: { jobListingId: true },
+  })
+  const recommendedIds = new Set(recommendedMatches.map((match) => match.jobListingId))
+  jobIds = jobIds.filter((jobId) => recommendedIds.has(jobId))
+
   const response = {
     newJobs: newCount,
     totalFound: foundJobs.length,
@@ -305,7 +321,8 @@ export async function POST(request: NextRequest) {
     expiredSkipped: persistedJobIds.length - jobIds.length,
     autoMatched: matchedCount,
     searchedFor: searchTerms,
-    location,
+    location: locationLabelForSearch(location),
+    searchedLocations: searchLocations.filter(Boolean),
     candidateSummary: searchData.summary,
     source: demoMode ? 'Demo mode' : 'JobTech/Platsbanken',
     sources: demoMode ? ['demo'] : ['jobtech-platsbanken'],

@@ -33,7 +33,16 @@ interface JobListing {
   closingAt: string | null
   jobType: string | null
   company: { name: string; logoUrl: string | null }
-  match?: { score: number; tier: string } | null
+  match?: {
+    score: number
+    tier: string
+    matchScore?: number
+    isRecommended?: boolean
+    matchedSkills?: string[]
+    missingSkills?: string[]
+    reason?: string
+    improvementTips?: string[]
+  } | null
 }
 
 interface SmartSearchResult {
@@ -41,10 +50,11 @@ interface SmartSearchResult {
   totalFound: number
   imported?: number
   autoMatched: number
-  searchedFor: string[]
-  candidateSummary: string
+  searchedFor?: string[]
+  candidateSummary?: string
   source?: string
   location?: string
+  searchedLocations?: string[]
   cached?: boolean
   demoMode?: boolean
   canRunDeeper?: boolean
@@ -94,10 +104,14 @@ export default function JobsPage() {
   const [editingAdaptedCV, setEditingAdaptedCV] = useState(false)
   const [searchProgress, setSearchProgress] = useState(0)
   const [showCached, setShowCached] = useState(true)
+  const [showOnlyStrongMatches, setShowOnlyStrongMatches] = useState(true)
   const [graphSkills, setGraphSkills] = useState<string[]>([])
   const [pollingStats, setPollingStats] = useState<import('@/components/ai/AISearchProgress').AISearchProgressStats | null>(null)
   const activeSearch = useRef<AbortController | null>(null)
   const autoSourceScanDone = useRef(false)
+  const lastSearchTerms = Array.isArray(lastSmartResult?.searchedFor) && lastSmartResult.searchedFor.length
+    ? lastSmartResult.searchedFor.join(', ')
+    : query || 'CV-profil'
 
   const searchSteps = [
     'Läser CV och hittar relevanta roller',
@@ -109,6 +123,11 @@ export default function JobsPage() {
   useEffect(() => {
     loadProfileLocation()
   }, [])
+
+  useEffect(() => {
+    const params = buildJobParams({ query, location, liaOnly, remoteOnly })
+    loadJobs(params)
+  }, [showOnlyStrongMatches])
 
   useEffect(() => {
     if (!smartSearching) {
@@ -167,7 +186,12 @@ export default function JobsPage() {
   async function loadJobs(params?: URLSearchParams) {
     setLoading(true)
     try {
-      const url = params ? `/api/jobs?${params}` : '/api/jobs'
+      const filteredParams = new URLSearchParams(params)
+      if (showOnlyStrongMatches) {
+        filteredParams.set('minMatch', '55')
+      }
+      const queryString = filteredParams.toString()
+      const url = queryString ? `/api/jobs?${queryString}` : '/api/jobs'
       const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
@@ -193,6 +217,7 @@ export default function JobsPage() {
     if (values.location) params.set('location', values.location)
     if (values.liaOnly) params.set('lia', '1')
     if (values.remoteOnly) params.set('remote', '1')
+    if (showOnlyStrongMatches) params.set('minMatch', '55')
     return params
   }
 
@@ -314,9 +339,30 @@ export default function JobsPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      toast.success(`Matchningspoäng: ${data.match.score.toFixed(1)}/5`)
+      if (data.fallback) {
+        toast.info('AI provider temporarily unavailable')
+      } else if (!data.isRecommended) {
+        toast.info('Jobbet matchar inte CV:t tillräckligt tydligt')
+      } else {
+        toast.success(`Matchningspoäng: ${data.matchScore}/100`)
+      }
       setJobs(prev => {
-        const updated = prev.map(j => j.id === jobId ? { ...j, match: { score: data.match.score, tier: data.match.tier } } : j)
+        if (showOnlyStrongMatches && !data.isRecommended) {
+          return prev.filter(j => j.id !== jobId)
+        }
+        const updated = prev.map(j => j.id === jobId ? {
+          ...j,
+          match: {
+            score: data.match.score,
+            tier: data.match.tier,
+            matchScore: data.matchScore,
+            isRecommended: data.isRecommended,
+            matchedSkills: data.matchedSkills,
+            missingSkills: data.missingSkills,
+            reason: data.reason,
+            improvementTips: data.improvementTips,
+          },
+        } : j)
         return [...updated].sort((a, b) => {
           if (a.match && b.match) return b.match.score - a.match.score
           if (a.match) return -1
@@ -522,11 +568,12 @@ export default function JobsPage() {
           <div className="flex items-start gap-3">
             <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-blue-900">{lastSmartResult.candidateSummary}</p>
+              <p className="text-sm font-medium text-blue-900">{lastSmartResult.candidateSummary || 'Sökningen är klar.'}</p>
               <p className="mt-1 text-xs text-blue-700">
-                Sökte efter: <span className="font-medium">{lastSmartResult.searchedFor.join(', ')}</span>
+                Sökte efter: <span className="font-medium">{lastSearchTerms}</span>
                 {' · '}{lastSmartResult.totalFound} jobb hittade · {lastSmartResult.imported ?? lastSmartResult.newJobs} importerade · {lastSmartResult.autoMatched} AI-matchade
                 {lastSmartResult.source ? ` · ${lastSmartResult.source}` : ''}
+                {lastSmartResult.searchedLocations?.length ? ` · Områden: ${lastSmartResult.searchedLocations.join(', ')}` : ''}
               </p>
             </div>
             <button onClick={() => setLastSmartResult(null)} className="shrink-0 text-blue-400 hover:text-blue-600">✕</button>
@@ -562,6 +609,15 @@ export default function JobsPage() {
             <input type="checkbox" checked={remoteOnly} onChange={(e) => setRemoteOnly(e.target.checked)} className="rounded" />
             Remote
           </label>
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+            <input
+              type="checkbox"
+              checked={showOnlyStrongMatches}
+              onChange={(e) => setShowOnlyStrongMatches(e.target.checked)}
+              className="rounded"
+            />
+            Show only strong matches
+          </label>
           <button type="submit" className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">
             <Filter className="h-4 w-4" />
             Filtrera
@@ -596,6 +652,13 @@ export default function JobsPage() {
               {place}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setLocation('Västra Götaland')}
+            className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 font-medium text-cyan-800 hover:border-cyan-300 hover:bg-cyan-100"
+          >
+            Västra Götaland
+          </button>
           {['Angered', 'Stockholm', 'Malmo'].map((place) => (
             <button
               key={place}
@@ -825,7 +888,7 @@ export default function JobsPage() {
                     )}
                     {job.match && (
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${tierColors[job.match.tier]}`}>
-                        {job.match.score.toFixed(1)}/5 · {tierLabel[job.match.tier]}
+                        {job.match.matchScore ?? Math.round(job.match.score * 20)}/100 - {tierLabel[job.match.tier]}
                       </span>
                     )}
                   </div>
@@ -839,6 +902,23 @@ export default function JobsPage() {
                     )}
                     {job.jobType && <span>⏰ {job.jobType}</span>}
                   </div>
+                  {job.match?.reason && (
+                    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                      <p>{job.match.reason}</p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                        {(job.match.matchedSkills ?? []).slice(0, 6).map((skill) => (
+                          <span key={`matched-${job.id}-${skill}`} className="rounded-full bg-green-100 px-2 py-0.5 font-medium text-green-700">
+                            {skill}
+                          </span>
+                        ))}
+                        {(job.match.missingSkills ?? []).slice(0, 4).map((skill) => (
+                          <span key={`missing-${job.id}-${skill}`} className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800">
+                            Saknas: {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {!job.match && (

@@ -1,5 +1,5 @@
 import { getAIProviderKey, getOptionalEnv } from '@/lib/server/env'
-import { AIProviderError, type CompletionRequest, parseProviderError } from './providers'
+import { AIProviderError, type ProviderRequest } from './types'
 
 const DEFAULT_GPT_SW3_MODEL = 'AI-Sweden-Models/gpt-sw3-6.7b-v2-instruct'
 
@@ -22,13 +22,26 @@ function extractGeneratedText(data: unknown): string | null {
   return null
 }
 
-export async function gptSw3Provider({ system, user, maxTokens }: CompletionRequest): Promise<string> {
-  const provider = 'gpt-sw3'
+async function parseProviderError(response: Response): Promise<string> {
+  try {
+    const data = await response.json()
+    if (typeof data?.error?.message === 'string') return data.error.message
+    if (typeof data?.error === 'string') return data.error
+    if (typeof data?.message === 'string') return data.message
+  } catch {
+    // Provider error bodies are not guaranteed to be JSON.
+  }
+
+  return response.statusText || 'Provider request failed'
+}
+
+export async function gptSw3Provider({ system, user, maxTokens, signal }: ProviderRequest): Promise<string> {
+  const provider = 'aisweden'
   let apiKey: string
   try {
     apiKey = getAIProviderKey(provider)
   } catch {
-    throw new AIProviderError('missing_api_key', provider, 'Missing HUGGINGFACE_API_TOKEN.')
+    throw new AIProviderError('missing_api_key', provider, 'Missing AI_SWEDEN_API_KEY.')
   }
   const endpoint =
     getOptionalEnv('GPT_SW3_ENDPOINT') ??
@@ -38,6 +51,7 @@ export async function gptSw3Provider({ system, user, maxTokens }: CompletionRequ
   try {
     response = await fetch(endpoint, {
       method: 'POST',
+      signal,
       headers: {
         authorization: `Bearer ${apiKey}`,
         'content-type': 'application/json',
@@ -55,8 +69,9 @@ export async function gptSw3Provider({ system, user, maxTokens }: CompletionRequ
       }),
     })
   } catch (error) {
+    const code = error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'request_failed'
     throw new AIProviderError(
-      'request_failed',
+      code,
       provider,
       error instanceof Error ? error.message : 'GPT-SW3 request could not be sent.'
     )

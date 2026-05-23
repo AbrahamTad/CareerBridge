@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { requireAuth, isAuthResponse } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { buildJobLocationWhere } from '@/lib/jobs/locations'
 
 function visibleSourceUrl(sourceUrl: string | null, sourceAts: string | null) {
   // Demo rows must never expose fake example.com URLs as real job announcements.
@@ -19,10 +20,11 @@ export async function GET(request: NextRequest) {
   const ids = searchParams.get('ids')?.split(',').map((id) => id.trim()).filter(Boolean) ?? []
   const lia = searchParams.get('lia') === '1'
   const remote = searchParams.get('remote') === '1'
+  const minMatch = Number(searchParams.get('minMatch') ?? '')
   const page = parseInt(searchParams.get('page') ?? '1')
   const limit = 20
 
-  const wholeSweden = ['sverige', 'sweden', 'hela sverige'].includes(location.trim().toLowerCase())
+  const locationWhere = buildJobLocationWhere(location)
   const where: Record<string, unknown> = {
     isActive: true,
     NOT: { sourceAts: 'demo' },
@@ -37,11 +39,24 @@ export async function GET(request: NextRequest) {
       { description: { contains: q, mode: 'insensitive' } },
     ]
   }
-  if (!ids.length && location && !wholeSweden) {
-    where.location = { contains: location, mode: 'insensitive' }
+  if (!ids.length && locationWhere) {
+    if (where.OR) {
+      where.AND = [{ OR: where.OR }, locationWhere]
+      delete where.OR
+    } else {
+      Object.assign(where, locationWhere)
+    }
   }
   if (!ids.length && lia) where.isLia = true
   if (!ids.length && remote) where.isRemote = true
+  if (Number.isFinite(minMatch) && minMatch > 0) {
+    where.matches = {
+      some: {
+        userId: auth.dbUserId,
+        score: { gte: Math.max(0, Math.min(100, minMatch)) / 20 },
+      },
+    }
+  }
 
   const [jobs, total] = await Promise.all([
     prisma.jobListing.findMany({
@@ -50,7 +65,18 @@ export async function GET(request: NextRequest) {
         company: { select: { name: true, logoUrl: true } },
         matches: {
           where: { userId: auth.dbUserId },
-          select: { score: true, tier: true },
+          select: {
+            score: true,
+            tier: true,
+            strengths: true,
+            missingSkills: true,
+            recommendations: true,
+            recommendation: true,
+            cvImprovement: true,
+            aiSummary: true,
+            aiReasoning: true,
+            rawAnalysis: true,
+          },
           take: 1,
         },
       },
@@ -61,12 +87,34 @@ export async function GET(request: NextRequest) {
     prisma.jobListing.count({ where }),
   ])
 
-  const enriched = jobs.map((j) => ({
-    ...j,
-    sourceUrl: visibleSourceUrl(j.sourceUrl, j.sourceAts),
-    match: j.matches[0] ?? null,
-    matches: undefined,
-  }))
+  const enriched = jobs.map((j) => {
+    const match = j.matches[0]
+    const raw = match?.rawAnalysis && typeof match.rawAnalysis === 'object' && !Array.isArray(match.rawAnalysis)
+      ? match.rawAnalysis as Record<string, unknown>
+      : {}
+    const matchedSkills = Array.isArray(raw.matchedSkills)
+      ? raw.matchedSkills.filter((item): item is string => typeof item === 'string')
+      : match?.strengths ?? []
+    const improvementTips = Array.isArray(raw.improvementTips)
+      ? raw.improvementTips.filter((item): item is string => typeof item === 'string')
+      : match?.recommendations ?? []
+
+    return {
+      ...j,
+      sourceUrl: visibleSourceUrl(j.sourceUrl, j.sourceAts),
+      match: match ? {
+        score: match.score,
+        tier: match.tier,
+        matchScore: typeof raw.matchScore === 'number' ? raw.matchScore : Math.round(match.score * 20),
+        isRecommended: typeof raw.isRecommended === 'boolean' ? raw.isRecommended : match.score >= 2.75,
+        matchedSkills,
+        missingSkills: match.missingSkills,
+        reason: match.aiReasoning ?? match.aiSummary ?? match.recommendation ?? '',
+        improvementTips,
+      } : null,
+      matches: undefined,
+    }
+  })
 
   return NextResponse.json({ jobs: enriched, total, page, pages: Math.ceil(total / limit) })
 }

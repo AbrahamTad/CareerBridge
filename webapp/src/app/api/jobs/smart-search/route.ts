@@ -41,12 +41,13 @@ export async function GET(request: NextRequest) {
 }
 
 import { analyzeAndSaveJobMatch } from '@/lib/ai/aiMatchingService'
-import { generateJobSearchQueries, getFriendlyAIError } from '@/lib/ai/service'
+import { generateJobSearchQueries, getCvText, getFriendlyAIError } from '@/lib/ai/service'
 import { searchJobTech, uniqueExternalJobs, type ExternalJob } from '@/lib/jobs/jobtech'
 import { expandJobSearchLocations, locationLabelForSearch } from '@/lib/jobs/locations'
 import { persistExternalJobs } from '@/lib/jobs/persist'
 import { verifyActiveJobIds } from '@/lib/jobs/liveness'
 import { hasReachedAiLimit } from '@/lib/subscription'
+import { generateJobSearchUrls } from '@/lib/jobs/job-sources'
 
 const CACHE_MINUTES = 20
 const MAX_IMPORTED_JOBS = 60
@@ -183,10 +184,13 @@ export async function POST(request: NextRequest) {
   let searchData: SearchData | null = searchDataFromParsedCv(cv.parsedData)
   let usedCvCache = Boolean(searchData)
 
+  // Prefer cleanedMarkdown for AI queries — more structured, fewer tokens
+  const cvText = getCvText(cv)
+
   if (!searchData) {
     try {
       await updateTask(searchTask.id, { progress: 18, currentStep: 'Extracting skills and experience' })
-      const raw = await generateJobSearchQueries(cv.rawText)
+      const raw = await generateJobSearchQueries(cvText)
       searchData = JSON.parse(cleanJson(raw)) as SearchData
 
       if (subscription) {
@@ -322,6 +326,15 @@ export async function POST(request: NextRequest) {
   const recommendedIds = new Set(recommendedMatches.map((match) => match.jobListingId))
   jobIds = jobIds.filter((jobId) => recommendedIds.has(jobId))
 
+  // Generate search URLs for additional job boards beyond Platsbanken
+  const cvParsed = cv.parsedData && typeof cv.parsedData === 'object' && !Array.isArray(cv.parsedData)
+    ? cv.parsedData as Record<string, unknown>
+    : {}
+  const cvSectors = Array.isArray(cvParsed.sectors)
+    ? (cvParsed.sectors as string[])
+    : []
+  const additionalSources = generateJobSearchUrls(searchTerms.slice(0, 4), location, cvSectors)
+
   const response = {
     newJobs: newCount,
     totalFound: foundJobs.length,
@@ -334,6 +347,7 @@ export async function POST(request: NextRequest) {
     candidateSummary: searchData.summary,
     source: demoMode ? 'Demo mode' : 'JobTech/Platsbanken',
     sources: demoMode ? ['demo'] : ['jobtech-platsbanken'],
+    additionalSources,
     liaMode: isLIAProfile,
     demoMode,
     usedCvCache,
@@ -343,13 +357,19 @@ export async function POST(request: NextRequest) {
     jobIds,
   }
 
+  // Save results to DB (additionalSources is excluded — not needed in cache)
+  const dbResults = {
+    ...response,
+    additionalSources: undefined,
+  } as unknown as Prisma.InputJsonObject
+
   await updateTask(searchTask.id, {
     status: 'COMPLETED',
     progress: 100,
     currentStep: 'Preparing recommendations',
     matchesFound: matchedCount,
     completedAt: new Date(),
-    results: response as Prisma.InputJsonObject,
+    results: dbResults,
   })
 
   return NextResponse.json(response)

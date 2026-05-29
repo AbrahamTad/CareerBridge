@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { requireAuth, isAuthResponse } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { adaptCV, getFriendlyAIError } from '@/lib/ai/service'
+import { adaptCV, getCvText, getFriendlyAIError } from '@/lib/ai/service'
 import { AIProviderError } from '@/lib/ai/types'
 import { cleanCvMarkdown } from '@/lib/cv-export-format'
 import { buildLocalAdaptedCv } from '@/lib/cv/local-adapter'
@@ -117,8 +117,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'AI-gräns nådd' }, { status: 429 })
   }
 
+  // Prefer cleanedMarkdown (structured, token-efficient) over raw text
+  const cvText = getCvText(cv)
+
   try {
-    const generatedContent = await adaptCV(cv.rawText, jobTitle, companyName, jobDescription, outputLanguage)
+    const generatedContent = await adaptCV(cvText, jobTitle, companyName, jobDescription, outputLanguage)
     const validation = validateGeneratedCvContent(generatedContent)
 
     if (!validation.valid) {
@@ -158,7 +161,7 @@ export async function POST(request: NextRequest) {
         status: err.status,
       })
 
-      const localValidation = buildAndValidateLocalCv(cv.rawText, jobTitle, companyName, jobDescription)
+      const localValidation = buildAndValidateLocalCv(cvText, jobTitle, companyName, jobDescription)
       if (!localValidation.valid) {
         console.warn('Generated CV saving cancelled because local fallback output was invalid', {
           userId: auth.dbUserId,

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { requireAuth, isAuthResponse } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { canUseLocalAIFallback, generateCoverLetter, getFriendlyAIError } from '@/lib/ai/service'
+import { canUseLocalAIFallback, generateCoverLetter, getCvText, getFriendlyAIError } from '@/lib/ai/service'
 import { hasReachedAiLimit } from '@/lib/subscription'
 
 function buildLocalCoverLetter(jobTitle: string, companyName: string, jobDescription: string, language: string) {
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const content = await generateCoverLetter(cv.rawText, jobTitle, companyName, jobDescription, language as 'en' | 'sv', tone)
+    const content = await generateCoverLetter(getCvText(cv), jobTitle, companyName, jobDescription, language as 'en' | 'sv', tone)
 
     const saved = await prisma.coverLetter.create({
       data: {

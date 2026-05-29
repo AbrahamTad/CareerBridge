@@ -1,4 +1,20 @@
 // CV text extraction and structured parsing from uploaded files
+import { convertToMarkdown, cleanMarkdown, extractCVStructure } from '@/lib/cv/markitdown-service'
+export type { CVStructuredData } from '@/lib/cv/markitdown-service'
+
+/**
+ * Convert an uploaded CV file to clean Markdown using MarkItDown service.
+ * Returns both the raw Markdown and the cleaned version ready for AI use.
+ */
+export async function extractMarkdownFromFile(
+  buffer: Buffer,
+  mimeType: string
+): Promise<{ rawMarkdown: string; cleanedMarkdown: string; structuredData: ReturnType<typeof extractCVStructure> }> {
+  const rawMarkdown = await convertToMarkdown(buffer, mimeType)
+  const cleanedMarkdown = cleanMarkdown(rawMarkdown)
+  const structuredData = extractCVStructure(cleanedMarkdown)
+  return { rawMarkdown, cleanedMarkdown, structuredData }
+}
 
 export async function extractTextFromFile(
   buffer: Buffer,

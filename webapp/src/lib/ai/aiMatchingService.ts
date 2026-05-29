@@ -176,22 +176,26 @@ function buildJobContext(job: MatchableJob) {
   ].filter(Boolean).join('\n\n')
 }
 
-function buildCvContext(rawText: string, parsedData: Prisma.JsonValue | null) {
-  const structured = parsedData && typeof parsedData === 'object'
-    ? `Structured CV data:\n${JSON.stringify(parsedData).slice(0, 4000)}\n\n`
+type CvInput = { rawText: string; cleanedMarkdown?: string | null; parsedData: Prisma.JsonValue | null }
+
+function buildCvContext(cv: CvInput) {
+  const structured = cv.parsedData && typeof cv.parsedData === 'object'
+    ? `Structured CV data:\n${JSON.stringify(cv.parsedData).slice(0, 4000)}\n\n`
     : ''
 
-  return `${structured}Raw CV:\n${rawText.slice(0, 12000)}`
+  // Use cleanedMarkdown when available — better structure, fewer tokens
+  const cvBody = cv.cleanedMarkdown?.trim() || cv.rawText
+  return `${structured}CV:\n${cvBody.slice(0, 12000)}`
 }
 
-export async function analyzeJobMatch(cv: { rawText: string; parsedData: Prisma.JsonValue | null }, job: MatchableJob) {
+export async function analyzeJobMatch(cv: CvInput, job: MatchableJob) {
   const relevance = scoreCvAgainstJob(cv.rawText, cv.parsedData, job)
   if (!relevance.isRecommended) {
     return analysisFromRelevance(relevance)
   }
 
   const matchText = await matchJobToCv(
-    buildCvContext(cv.rawText, cv.parsedData),
+    buildCvContext(cv),
     buildJobContext(job),
     job.title
   )
@@ -199,7 +203,7 @@ export async function analyzeJobMatch(cv: { rawText: string; parsedData: Prisma.
   return mergeAiWithRelevance(parseMatchAnalysis(matchText), relevance)
 }
 
-export function buildDeterministicMatch(cv: { rawText: string; parsedData: Prisma.JsonValue | null }, job: MatchableJob) {
+export function buildDeterministicMatch(cv: CvInput, job: MatchableJob) {
   return analysisFromRelevance(scoreCvAgainstJob(cv.rawText, cv.parsedData, job), 'local-relevance')
 }
 
@@ -249,7 +253,7 @@ export async function saveJobMatch(userId: string, cvId: string, jobListingId: s
   })
 }
 
-export async function analyzeAndSaveJobMatch(userId: string, cv: { id: string; rawText: string; parsedData: Prisma.JsonValue | null }, job: MatchableJob) {
+export async function analyzeAndSaveJobMatch(userId: string, cv: CvInput & { id: string }, job: MatchableJob) {
   const analysis = await analyzeJobMatch(cv, job)
   return saveJobMatch(userId, cv.id, job.id, analysis)
 }

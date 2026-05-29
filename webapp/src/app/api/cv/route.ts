@@ -5,6 +5,7 @@ import { requireAuth, isAuthResponse } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import {
   extractTextFromFile,
+  extractMarkdownFromFile,
   validateCVText,
   parseCVProfile,
   cvProfileToParsedData,
@@ -53,6 +54,11 @@ export async function POST(request: NextRequest) {
     let fileSize: number | null = null;
     let mimeType: string | null = null;
 
+    // Track MarkItDown conversion results (populated for file uploads)
+    let rawMarkdown: string | null = null
+    let cleanedMarkdown: string | null = null
+    let markdownStructuredData: Record<string, unknown> | null = null
+
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
       const file = formData.get("file") as File | null;
@@ -68,6 +74,7 @@ export async function POST(request: NextRequest) {
 
       const buffer = Buffer.from(await file.arrayBuffer());
       try {
+        // Step 1: Extract plain text (used as rawText, backward compatible)
         rawText = await extractTextFromFile(buffer, mimeType ?? "");
       } catch (err: unknown) {
         return NextResponse.json(
@@ -76,6 +83,32 @@ export async function POST(request: NextRequest) {
           },
           { status: 400 },
         );
+      }
+
+      // Step 2: MarkItDown conversion — convert to structured Markdown.
+      // This runs separately so a conversion failure never blocks the upload.
+      try {
+        const md = await extractMarkdownFromFile(buffer, mimeType ?? "")
+        rawMarkdown = md.rawMarkdown
+        cleanedMarkdown = md.cleanedMarkdown
+        // Merge structured data from Markdown extraction into the parsed profile
+        markdownStructuredData = {
+          name: md.structuredData.name,
+          contact: md.structuredData.contact,
+          education: md.structuredData.education ?? [],
+          experience: md.structuredData.experience ?? [],
+          projects: md.structuredData.projects ?? [],
+          certifications: md.structuredData.certifications ?? [],
+          summary: md.structuredData.summary,
+          structuredSkills: md.structuredData.skills ?? [],
+          structuredLanguages: md.structuredData.languages ?? [],
+        }
+      } catch (mdErr: unknown) {
+        // MarkItDown failure is non-fatal — log it and continue with plain text
+        console.warn("MarkItDown conversion failed (non-fatal):", {
+          fileName,
+          error: mdErr instanceof Error ? mdErr.message : String(mdErr),
+        })
       }
     } else {
       const body = await request.json();
@@ -92,8 +125,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
 
     const profile = parseCVProfile(rawText);
-    // Store a minimal parsedData immediately so smart-search can use it without AI
-    const parsedData = cvProfileToParsedData(profile) as Prisma.InputJsonObject;
+    // Merge heuristic profile with richer MarkItDown structured data
+    const parsedData = {
+      ...cvProfileToParsedData(profile),
+      ...(markdownStructuredData ?? {}),
+      source: cleanedMarkdown ? 'markitdown-service' : 'local-cv-parser',
+    } as Prisma.InputJsonObject;
 
     // Deactivate old CVs
     await prisma.cV.updateMany({
@@ -108,6 +145,8 @@ export async function POST(request: NextRequest) {
         fileSize,
         mimeType,
         rawText,
+        rawMarkdown,
+        cleanedMarkdown,
         parsedData,
         isActive: true,
       },

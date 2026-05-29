@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
 import { requireAuth, isAuthResponse } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { analyzeCV, getFriendlyAIError } from '@/lib/ai/service'
+import { analyzeCV, getCvText, getFriendlyAIError } from '@/lib/ai/service'
 import { hasReachedAiLimit } from '@/lib/subscription'
 
 const KNOWN_SKILLS = [
@@ -149,7 +149,7 @@ export async function POST() {
   }
 
   try {
-    const analysisText = await analyzeCV(cv.rawText)
+    const analysisText = await analyzeCV(getCvText(cv))
     // Claude sometimes wraps JSON in markdown code blocks — strip them
     const cleaned = analysisText.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim()
 

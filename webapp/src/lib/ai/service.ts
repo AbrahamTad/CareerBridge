@@ -3,6 +3,15 @@ import { detectContentLanguage } from './language-detector'
 import { providerLabel } from './providers/index'
 import { AIProviderError, type CompletionRequest } from './types'
 
+/**
+ * Return the best available CV text for AI prompts.
+ * Prefers cleanedMarkdown (structured, token-efficient) over rawText.
+ * The CV type here is a partial to support both old and new DB records.
+ */
+export function getCvText(cv: { rawText: string; cleanedMarkdown?: string | null }): string {
+  return cv.cleanedMarkdown?.trim() || cv.rawText
+}
+
 function shouldTryFallback(error: unknown): error is AIProviderError {
   if (!(error instanceof AIProviderError)) return false
   return true
@@ -79,8 +88,10 @@ export async function analyzeCV(cvText: string): Promise<string> {
     task: 'cv-analysis',
     languageHint: detectContentLanguage(cvText),
     system: `You are an expert CV analyzer covering all Swedish job market sectors: IT/tech, healthcare (vård/omsorg), education (utbildning), trades (yrkesarbeten), transport, and office/economy roles.
+The CV may be in plain text or Markdown format with ## section headings. Use the structure when present.
 Extract structured information and return ONLY valid JSON:
 {
+  "name": "candidate full name",
   "skills": ["technical and professional skills"],
   "tools": ["specific tools, software, systems used"],
   "languages": ["programming/technical languages"],
@@ -88,6 +99,7 @@ Extract structured information and return ONLY valid JSON:
   "education": [{"degree": "", "field": "", "institution": "", "year": ""}],
   "experience": [{"title": "", "company": "", "duration": "", "highlights": []}],
   "projects": [{"name": "", "description": "", "technologies": []}],
+  "certifications": ["certifications and licenses"],
   "summary": "2-sentence plain language summary",
   "targetRoles": ["3-6 Swedish AND English job title keywords matching their background, e.g. 'Frontendutvecklare', 'Frontend Developer', 'QA Testare', 'Undersköterska'"],
   "seniorityLevel": "junior|mid|senior",

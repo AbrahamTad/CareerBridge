@@ -73,6 +73,9 @@ model CV {
   fileSize   Int?
   mimeType   String?
   rawText    String   @db.Text
+  // Markdown fields added by MarkItDown integration
+  rawMarkdown     String?  @db.Text  // Raw Markdown from MarkItDown conversion
+  cleanedMarkdown String?  @db.Text  // Cleaned, deduplicated Markdown (used by AI)
   parsedData Json?
   isActive   Boolean  @default(true)
   language   String   @default("en")

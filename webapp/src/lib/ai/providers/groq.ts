@@ -1,13 +1,21 @@
 import { getAIProviderKey, getOptionalEnv } from '@/lib/server/env'
 import { AIProviderError, type AIProviderClient, type ProviderRequest } from '../types'
-import { parseProviderError } from './utils'
+import { normalizeBaseUrl, normalizeRequestError, parseProviderError, providerErrorCodeFromStatus } from './utils'
 
 const DEFAULT_MODEL = 'llama-3.1-8b-instant'
-const BASE_URL = 'https://api.groq.com/openai/v1'
+const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1'
+
+function baseUrl() {
+  return normalizeBaseUrl(getOptionalEnv('GROQ_BASE_URL') ?? DEFAULT_BASE_URL)
+}
 
 export const groqProvider: AIProviderClient = {
   name: 'groq',
   envKey: 'GROQ_API_KEY',
+  modelEnvKey: 'GROQ_MODEL',
+  defaultModel: DEFAULT_MODEL,
+  baseUrlEnvKey: 'GROQ_BASE_URL',
+  defaultBaseUrl: DEFAULT_BASE_URL,
   requiresApiKey: true,
   priority: 4,
   supportsSwedish: true,
@@ -22,7 +30,7 @@ export const groqProvider: AIProviderClient = {
 
     let response: Response
     try {
-      response = await fetch(`${BASE_URL}/chat/completions`, {
+      response = await fetch(`${baseUrl()}/chat/completions`, {
         method: 'POST',
         signal,
         headers: {
@@ -39,13 +47,12 @@ export const groqProvider: AIProviderClient = {
         }),
       })
     } catch (error) {
-      const code = error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'request_failed'
-      throw new AIProviderError(code, provider, error instanceof Error ? error.message : 'Groq request could not be sent.')
+      throw normalizeRequestError(provider, error, 'Groq request could not be sent.')
     }
 
     if (!response.ok) {
       const message = await parseProviderError(response)
-      throw new AIProviderError(response.status === 401 ? 'invalid_api_key' : 'request_failed', provider, message, response.status)
+      throw new AIProviderError(providerErrorCodeFromStatus(response.status), provider, message, response.status)
     }
 
     const data = await response.json()
@@ -55,8 +62,13 @@ export const groqProvider: AIProviderClient = {
     }
     return text
   },
-  async healthCheck() {
-    getAIProviderKey('groq')
-    return true
+  async healthCheck(signal?: AbortSignal) {
+    const result = await this.complete({
+      system: 'Reply with OK only.',
+      user: 'OK',
+      maxTokens: 8,
+      signal,
+    })
+    return result.trim().length > 0
   },
 }

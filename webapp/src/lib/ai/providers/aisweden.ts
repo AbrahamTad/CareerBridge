@@ -1,6 +1,6 @@
 import { getAIProviderKey, getOptionalEnv } from '@/lib/server/env'
 import { AIProviderError, type AIProviderClient, type ProviderRequest } from '../types'
-import { parseProviderError } from './utils'
+import { normalizeRequestError, parseProviderError, providerErrorCodeFromStatus } from './utils'
 
 const DEFAULT_MODEL = 'AI-Sweden-Models/gpt-sw3-6.7b-v2-instruct'
 
@@ -24,8 +24,12 @@ function extractGeneratedText(data: unknown): string | null {
 export const aiSwedenProvider: AIProviderClient = {
   name: 'aisweden',
   envKey: 'AI_SWEDEN_API_KEY',
+  modelEnvKey: 'AI_SWEDEN_MODEL',
+  defaultModel: DEFAULT_MODEL,
+  baseUrlEnvKey: 'AI_SWEDEN_BASE_URL',
+  defaultBaseUrl: `https://api-inference.huggingface.co/models/${DEFAULT_MODEL}`,
   requiresApiKey: true,
-  priority: 3,
+  priority: 8,
   supportsSwedish: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest) {
     const provider = 'aisweden'
@@ -62,13 +66,12 @@ export const aiSwedenProvider: AIProviderClient = {
         }),
       })
     } catch (error) {
-      const code = error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'request_failed'
-      throw new AIProviderError(code, provider, error instanceof Error ? error.message : 'AI Sweden request could not be sent.')
+      throw normalizeRequestError(provider, error, 'AI Sweden request could not be sent.')
     }
 
     if (!response.ok) {
       const message = await parseProviderError(response)
-      throw new AIProviderError(response.status === 401 || response.status === 403 ? 'invalid_api_key' : 'request_failed', provider, message, response.status)
+      throw new AIProviderError(providerErrorCodeFromStatus(response.status), provider, message, response.status)
     }
 
     const data = await response.json()
@@ -78,8 +81,13 @@ export const aiSwedenProvider: AIProviderClient = {
     }
     return text.trim()
   },
-  async healthCheck() {
-    getAIProviderKey('aisweden')
-    return true
+  async healthCheck(signal?: AbortSignal) {
+    const result = await this.complete({
+      system: 'Reply with OK only.',
+      user: 'OK',
+      maxTokens: 8,
+      signal,
+    })
+    return result.trim().length > 0
   },
 }

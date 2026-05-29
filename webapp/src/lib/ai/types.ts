@@ -6,10 +6,22 @@ export type AIErrorCode =
   | 'missing_api_key'
   | 'missing_configuration'
   | 'invalid_api_key'
+  | 'quota_exceeded'
   | 'request_failed'
+  | 'server_offline'
   | 'timeout'
   | 'all_unavailable'
   | 'invalid_response'
+
+export type AIProviderCheckStatus =
+  | 'working'
+  | 'missing key'
+  | 'invalid key'
+  | 'quota exceeded'
+  | 'timeout'
+  | 'server offline'
+  | 'skipped'
+  | 'unknown error'
 
 export type ContentLanguage = 'sv' | 'en' | 'mixed' | 'unknown'
 
@@ -28,6 +40,10 @@ export interface ProviderRequest extends CompletionRequest {
 export interface AIProviderClient {
   name: AIProvider
   envKey: string
+  modelEnvKey?: string
+  defaultModel?: string
+  baseUrlEnvKey?: string
+  defaultBaseUrl?: string
   requiresApiKey: boolean
   priority: number
   supportsSwedish?: boolean
@@ -49,6 +65,10 @@ export interface ProviderHealth {
   available: boolean
   configured: boolean
   local: boolean
+  envKey: string
+  model: string
+  checkedAt: string
+  checkStatus: AIProviderCheckStatus
   responseTimeMs: number
   status: 'working' | 'warning' | 'unavailable'
   lastSuccessAt?: string
@@ -62,6 +82,7 @@ export interface ProviderHealth {
 }
 
 export interface AIHealthSummary {
+  gemini: boolean
   openai: boolean
   anthropic: boolean
   deepseek: boolean

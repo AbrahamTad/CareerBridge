@@ -15,7 +15,7 @@ async function main() {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
       max_tokens: 5,
       messages: [{ role: 'user', content: 'Reply with ok.' }],
     }),

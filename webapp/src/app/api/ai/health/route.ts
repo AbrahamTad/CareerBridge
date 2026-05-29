@@ -1,11 +1,30 @@
 import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 import { getAIHealth } from '@/lib/ai/provider-manager'
+import type { AIProvider } from '@/lib/ai/types'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+const PROVIDERS: AIProvider[] = [
+  'gemini',
+  'openai',
+  'deepseek',
+  'groq',
+  'openrouter',
+  'anthropic',
+  'huggingface',
+  'aisweden',
+  'ollama',
+]
+
+function providerFromRequest(request: NextRequest): AIProvider | undefined {
+  const provider = request.nextUrl.searchParams.get('provider')
+  return PROVIDERS.find((candidate) => candidate === provider)
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const health = await getAIHealth()
+    const health = await getAIHealth(providerFromRequest(request))
     return NextResponse.json(health)
   } catch (error) {
     console.error('AI health check failed', {
@@ -13,6 +32,7 @@ export async function GET() {
     })
     return NextResponse.json(
       {
+        gemini: false,
         openai: false,
         anthropic: false,
         deepseek: false,

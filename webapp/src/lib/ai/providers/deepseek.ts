@@ -1,15 +1,23 @@
 import { getAIProviderKey, getOptionalEnv } from '@/lib/server/env'
 import { AIProviderError, type AIProviderClient, type ProviderRequest } from '../types'
-import { parseProviderError } from './utils'
+import { normalizeBaseUrl, normalizeRequestError, parseProviderError, providerErrorCodeFromStatus } from './utils'
 
 const DEFAULT_MODEL = 'deepseek-chat'
-const BASE_URL = 'https://api.deepseek.com/v1'
+const DEFAULT_BASE_URL = 'https://api.deepseek.com/v1'
+
+function baseUrl() {
+  return normalizeBaseUrl(getOptionalEnv('DEEPSEEK_BASE_URL') ?? DEFAULT_BASE_URL)
+}
 
 export const deepseekProvider: AIProviderClient = {
   name: 'deepseek',
   envKey: 'DEEPSEEK_API_KEY',
+  modelEnvKey: 'DEEPSEEK_MODEL',
+  defaultModel: DEFAULT_MODEL,
+  baseUrlEnvKey: 'DEEPSEEK_BASE_URL',
+  defaultBaseUrl: DEFAULT_BASE_URL,
   requiresApiKey: true,
-  priority: 2,
+  priority: 3,
   supportsSwedish: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest) {
     const provider = 'deepseek'
@@ -22,7 +30,7 @@ export const deepseekProvider: AIProviderClient = {
 
     let response: Response
     try {
-      response = await fetch(`${BASE_URL}/chat/completions`, {
+      response = await fetch(`${baseUrl()}/chat/completions`, {
         method: 'POST',
         signal,
         headers: {
@@ -39,13 +47,12 @@ export const deepseekProvider: AIProviderClient = {
         }),
       })
     } catch (error) {
-      const code = error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'request_failed'
-      throw new AIProviderError(code, provider, error instanceof Error ? error.message : 'DeepSeek request could not be sent.')
+      throw normalizeRequestError(provider, error, 'DeepSeek request could not be sent.')
     }
 
     if (!response.ok) {
       const message = await parseProviderError(response)
-      throw new AIProviderError(response.status === 401 ? 'invalid_api_key' : 'request_failed', provider, message, response.status)
+      throw new AIProviderError(providerErrorCodeFromStatus(response.status), provider, message, response.status)
     }
 
     const data = await response.json()
@@ -55,8 +62,13 @@ export const deepseekProvider: AIProviderClient = {
     }
     return text
   },
-  async healthCheck() {
-    getAIProviderKey('deepseek')
-    return true
+  async healthCheck(signal?: AbortSignal) {
+    const result = await this.complete({
+      system: 'Reply with OK only.',
+      user: 'OK',
+      maxTokens: 8,
+      signal,
+    })
+    return result.trim().length > 0
   },
 }

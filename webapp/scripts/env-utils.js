@@ -40,9 +40,7 @@ function describeKey(name, sources) {
   const value = (process.env[name] || '').trim()
   if (!value) return `${name}: missing`
 
-  const prefix = value.slice(0, Math.min(8, value.length))
-  const suffix = value.slice(Math.max(0, value.length - 4))
-  return `${name}: loaded from ${sources[name] || 'process env'}, length ${value.length}, ${prefix}...${suffix}`
+  return `${name}: loaded from ${sources[name] || 'process env'}, length ${value.length}, masked`
 }
 
 module.exports = {

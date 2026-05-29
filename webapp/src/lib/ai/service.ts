@@ -38,17 +38,24 @@ export function getFriendlyAIError(error: unknown, fallback = 'AI request failed
     }
   }
 
-  if (!error.status) {
+  if (error.code === 'quota_exceeded' || error.status === 429) {
     return {
-      message: `Could not reach ${providerLabel(error.provider)}. Check your internet connection, firewall, or provider status.`,
+      message: `${providerLabel(error.provider)} quota or rate limit reached. Check billing, credits, or rate limits.`,
+      status: 429,
+    }
+  }
+
+  if (error.code === 'server_offline') {
+    return {
+      message: `${providerLabel(error.provider)} is offline. Check the local server or provider status.`,
       status: 502,
     }
   }
 
-  if (error.status === 429) {
+  if (!error.status) {
     return {
-      message: `${providerLabel(error.provider)} quota or rate limit reached. Check billing, credits, or rate limits.`,
-      status: 429,
+      message: `Could not reach ${providerLabel(error.provider)}. Check your internet connection, firewall, or provider status.`,
+      status: 502,
     }
   }
 

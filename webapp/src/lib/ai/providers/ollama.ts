@@ -11,8 +11,12 @@ function baseUrl() {
 export const ollamaProvider: AIProviderClient = {
   name: 'ollama',
   envKey: 'OLLAMA_BASE_URL',
+  modelEnvKey: 'OLLAMA_MODEL',
+  defaultModel: DEFAULT_MODEL,
+  baseUrlEnvKey: 'OLLAMA_BASE_URL',
+  defaultBaseUrl: 'http://localhost:11434',
   requiresApiKey: false,
-  priority: 8,
+  priority: 9,
   supportsSwedish: true,
   local: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest) {
@@ -39,7 +43,7 @@ export const ollamaProvider: AIProviderClient = {
         }),
       })
     } catch (error) {
-      const code = error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'request_failed'
+      const code = error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'server_offline'
       const message = code === 'timeout'
         ? `Ollama timed out at ${url}. Check that the local server and model are available.`
         : `Ollama is not running at ${url}. Start Ollama, pull the configured model, or remove OLLAMA_BASE_URL to skip it.`
@@ -59,9 +63,12 @@ export const ollamaProvider: AIProviderClient = {
     return text
   },
   async healthCheck(signal?: AbortSignal) {
-    const url = baseUrl()
-    if (!url) throw new AIProviderError('missing_configuration', 'ollama', 'Missing OLLAMA_BASE_URL.')
-    const response = await fetch(`${url}/api/tags`, { signal })
-    return response.ok
+    const result = await this.complete({
+      system: 'Reply with OK only.',
+      user: 'OK',
+      maxTokens: 8,
+      signal,
+    })
+    return result.trim().length > 0
   },
 }

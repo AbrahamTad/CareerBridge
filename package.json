@@ -16,7 +16,16 @@
     "rollback": "node update-system.mjs rollback",
     "liveness": "node check-liveness.mjs",
     "scan": "node scan.mjs",
-    "gemini:eval": "node gemini-eval.mjs"
+    "gemini:eval": "node gemini-eval.mjs",
+    "check:env": "npm --prefix webapp run check:env",
+    "check:apis": "npm --prefix webapp run check:apis",
+    "check:db": "npm --prefix webapp run check:db",
+    "test:ai": "npm --prefix webapp run test:ai",
+    "lint": "npm --prefix webapp run lint",
+    "type-check": "npm --prefix webapp run type-check",
+    "build": "npm --prefix webapp run build",
+    "prisma:generate": "npm --prefix webapp run prisma:generate",
+    "prisma:studio": "npm --prefix webapp run prisma:studio"
   },
   "keywords": [
     "ai",
@@ -34,7 +43,9 @@
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "dotenv": "^16.4.7",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "markitdown": "^0.0.4",
+    "openai": "^6.39.0"
   },
   "devDependencies": {
     "playwright": "^1.58.1"

@@ -1,41 +1,25 @@
 import { createClient } from '@/lib/supabase/server'
-import prisma from '@/lib/prisma'
 import Link from 'next/link'
-import { ArrowRight, BrainCircuit, ClipboardList, Search, TrendingUp } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BrainCircuit, ClipboardList, Search, TrendingUp } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { APP_STATUS_LABELS, APP_STATUS_COLORS } from '@/types'
 import type { AppStatusType } from '@/types'
 import { PageHero } from '@/components/ui/ModernShell'
+import { getDashboardData } from '@/lib/dashboard/data'
 
 export const metadata = { title: 'Dashboard' }
 
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-
-  const dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user!.id },
-    include: { profile: true, cvs: { where: { isActive: true }, take: 1 } },
-  })
-
-  const [applicationStats, recentMatches, recentApplications] = await Promise.all([
-    prisma.application.groupBy({
-      by: ['status'],
-      where: { userId: dbUser?.id ?? '' },
-      _count: true,
-    }),
-    prisma.jobMatch.findMany({
-      where: { userId: dbUser?.id ?? '' },
-      include: { jobListing: { include: { company: true } } },
-      orderBy: { score: 'desc' },
-      take: 5,
-    }),
-    prisma.application.findMany({
-      where: { userId: dbUser?.id ?? '' },
-      orderBy: { updatedAt: 'desc' },
-      take: 5,
-    }),
-  ])
+  const { dbUser, applicationStats, recentMatches, recentApplications, databaseUnavailable } =
+    user ? await getDashboardData(user.id) : {
+      dbUser: null,
+      applicationStats: [],
+      recentMatches: [],
+      recentApplications: [],
+      databaseUnavailable: false,
+    }
 
   const statsMap = Object.fromEntries(applicationStats.map((s) => [s.status, s._count]))
   const totalApplications = applicationStats.reduce((sum, s) => sum + s._count, 0)
@@ -50,6 +34,19 @@ export default async function DashboardPage() {
         title={`Hej, ${name}!`}
         description="Track your CV graph, strongest matches, application pipeline, and next actions from one modern dashboard."
       />
+      {databaseUnavailable && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+            <div>
+              <h2 className="font-semibold text-amber-950">Database connection is temporarily unavailable</h2>
+              <p className="mt-1 text-sm text-amber-800">
+                Please check Supabase connection. Dashboard metrics are shown with fallback values until the database responds again.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Welcome */}
       <div className="hidden">
         <h1 className="text-2xl font-bold text-slate-900">Hej, {name}! 👋</h1>

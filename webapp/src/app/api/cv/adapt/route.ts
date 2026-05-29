@@ -26,6 +26,7 @@ const PROVIDER_ERROR_PATTERNS = [
   /\b429\b.*\b(quota|rate limit|too many requests)\b/i,
   /\b(quota|rate limit|too many requests)\b/i,
   /\bOPENAI_API_KEY\b/i,
+  /\bGEMINI_API_KEY\b/i,
   /\bANTHROPIC_API_KEY\b/i,
   /\bAI_SWEDEN_API_KEY\b/i,
   /\bHUGGINGFACE_API_KEY\b/i,

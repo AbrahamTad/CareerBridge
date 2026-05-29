@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import { Sparkles, Loader2, Download, Copy, RotateCcw } from 'lucide-react'
 import {
@@ -18,13 +19,14 @@ export default function CVBuilderPage() {
   const [jobDescription, setJobDescription] = useState('')
   const [language, setLanguage] = useState<'sv' | 'en'>('sv')
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<{ content: string; id: string } | null>(null)
+  const [result, setResult] = useState<{ content: string; id: string; fallback?: boolean; message?: string } | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [editingResult, setEditingResult] = useState(false)
 
-  async function handleGenerate(e: React.FormEvent) {
-    e.preventDefault()
+  async function runGenerate() {
     setLoading(true)
     setResult(null)
+    setErrorMessage(null)
     try {
       const res = await fetch('/api/cv/adapt', {
         method: 'POST',
@@ -44,10 +46,17 @@ export default function CVBuilderPage() {
         toast.success('CV anpassat!')
       }
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Fel vid generering')
+      const message = err instanceof Error ? err.message : 'Fel vid generering'
+      setErrorMessage(message)
+      toast.error(message, { id: 'cv-generation-error' })
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleGenerate(e: React.FormEvent) {
+    e.preventDefault()
+    await runGenerate()
   }
 
   async function handleCopy() {
@@ -180,6 +189,27 @@ export default function CVBuilderPage() {
               </div>
             )}
           </div>
+          {errorMessage && !loading && !result && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">CV generation needs attention</p>
+              <p className="mt-1">{errorMessage}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void runGenerate()}
+                  className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                >
+                  Retry
+                </button>
+                <Link
+                  href="/settings/ai-providers"
+                  className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                >
+                  AI provider status
+                </Link>
+              </div>
+            </div>
+          )}
           {result ? (
             <div className="space-y-4">
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">

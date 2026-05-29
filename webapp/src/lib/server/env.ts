@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 
 export type AIProvider =
+  | 'gemini'
   | 'openai'
   | 'deepseek'
   | 'aisweden'
@@ -13,14 +14,25 @@ export type AIProvider =
 
 const AI_ENV_NAMES = new Set([
   'AI_PROVIDER',
+  'NEXT_PUBLIC_SUPABASE_URL',
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'DATABASE_URL',
+  'DIRECT_URL',
+  'GEMINI_API_KEY',
+  'GEMINI_MODEL',
+  'GEMINI_BASE_URL',
   'OPENAI_API_KEY',
   'OPENAI_MODEL',
   'DEEPSEEK_API_KEY',
   'DEEPSEEK_MODEL',
+  'DEEPSEEK_BASE_URL',
   'GROQ_API_KEY',
   'GROQ_MODEL',
+  'GROQ_BASE_URL',
   'OPENROUTER_API_KEY',
   'OPENROUTER_MODEL',
+  'OPENROUTER_BASE_URL',
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_MODEL',
   'AI_SWEDEN_API_KEY',
@@ -35,7 +47,43 @@ const AI_ENV_NAMES = new Set([
   'OLLAMA_BASE_URL',
   'OLLAMA_MODEL',
   'OLLAMA_TIMEOUT_MS',
+  'NEXT_PUBLIC_APP_URL',
 ])
+
+const REQUIRED_ENV_GROUPS = [
+  {
+    name: 'Supabase URL',
+    vars: ['NEXT_PUBLIC_SUPABASE_URL'],
+    reason: 'Supabase auth and database-backed routes need the project URL.',
+  },
+  {
+    name: 'Supabase anon key',
+    vars: ['NEXT_PUBLIC_SUPABASE_ANON_KEY'],
+    reason: 'Supabase browser and server auth clients need the anon key.',
+  },
+  {
+    name: 'Supabase service role key',
+    vars: ['SUPABASE_SERVICE_ROLE_KEY'],
+    reason: 'Account and admin server routes need the service role key.',
+  },
+  {
+    name: 'Database URL',
+    vars: ['DATABASE_URL', 'DIRECT_URL'],
+    reason: 'Prisma needs at least one database connection string.',
+  },
+]
+
+export const OPTIONAL_AI_PROVIDER_ENV = [
+  { provider: 'gemini', key: 'GEMINI_API_KEY', model: 'GEMINI_MODEL', baseUrl: 'GEMINI_BASE_URL' },
+  { provider: 'openai', key: 'OPENAI_API_KEY', model: 'OPENAI_MODEL' },
+  { provider: 'deepseek', key: 'DEEPSEEK_API_KEY', model: 'DEEPSEEK_MODEL', baseUrl: 'DEEPSEEK_BASE_URL' },
+  { provider: 'groq', key: 'GROQ_API_KEY', model: 'GROQ_MODEL', baseUrl: 'GROQ_BASE_URL' },
+  { provider: 'openrouter', key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', baseUrl: 'OPENROUTER_BASE_URL' },
+  { provider: 'anthropic', key: 'ANTHROPIC_API_KEY', model: 'ANTHROPIC_MODEL' },
+  { provider: 'huggingface', key: 'HUGGINGFACE_API_KEY', fallbackKey: 'HUGGINGFACE_API_TOKEN', model: 'HUGGINGFACE_MODEL' },
+  { provider: 'aisweden', key: 'AI_SWEDEN_API_KEY', model: 'AI_SWEDEN_MODEL', baseUrl: 'AI_SWEDEN_BASE_URL' },
+  { provider: 'ollama', key: 'OLLAMA_BASE_URL', model: 'OLLAMA_MODEL', local: true },
+] as const
 
 function parseEnvFile(filePath: string): Record<string, string> {
   if (!fs.existsSync(filePath)) return {}
@@ -80,7 +128,7 @@ export function getSelectedAIProvider(): AIProvider {
     return configured
   }
 
-  return 'openai'
+  return 'gemini'
 }
 
 export function getConfiguredAIProvider(): AIProvider | undefined {
@@ -91,6 +139,7 @@ export function getConfiguredAIProvider(): AIProvider | undefined {
   }
 
   if (
+    configured === 'gemini' ||
     configured === 'openai' ||
     configured === 'deepseek' ||
     configured === 'aisweden' ||
@@ -112,7 +161,8 @@ export function getConfiguredAIProvider(): AIProvider | undefined {
 
 export function getAIProviderKey(provider: AIProvider): string {
   const envName =
-    provider === 'openai' ? 'OPENAI_API_KEY'
+    provider === 'gemini' ? 'GEMINI_API_KEY'
+    : provider === 'openai' ? 'OPENAI_API_KEY'
     : provider === 'deepseek' ? 'DEEPSEEK_API_KEY'
     : provider === 'aisweden' ? 'AI_SWEDEN_API_KEY'
     : provider === 'groq' ? 'GROQ_API_KEY'
@@ -138,6 +188,7 @@ export function getOptionalEnv(name: string): string | undefined {
 }
 
 const AI_SETUP_ENV_NAMES = [
+  'GEMINI_API_KEY',
   'OPENAI_API_KEY',
   'DEEPSEEK_API_KEY',
   'GROQ_API_KEY',
@@ -147,6 +198,40 @@ const AI_SETUP_ENV_NAMES = [
   'ANTHROPIC_API_KEY',
   'OLLAMA_BASE_URL',
 ]
+
+export function getEnvironmentValidation() {
+  const required = REQUIRED_ENV_GROUPS.map((group) => {
+    const configured = group.vars.filter((name) => Boolean(getOptionalEnv(name)))
+    return {
+      ...group,
+      configured,
+      missing: configured.length === 0,
+    }
+  })
+
+  const providers = OPTIONAL_AI_PROVIDER_ENV.map((provider) => {
+    const configured = Boolean(getOptionalEnv(provider.key)) ||
+      ('fallbackKey' in provider && Boolean(getOptionalEnv(provider.fallbackKey)))
+
+    return {
+      provider: provider.provider,
+      key: provider.key,
+      fallbackKey: 'fallbackKey' in provider ? provider.fallbackKey : undefined,
+      model: provider.model,
+      baseUrl: 'baseUrl' in provider ? provider.baseUrl : undefined,
+      configured,
+      local: 'local' in provider ? provider.local === true : false,
+    }
+  })
+
+  return {
+    required,
+    missingRequired: required.filter((group) => group.missing),
+    providers,
+    configuredProviders: providers.filter((provider) => provider.configured),
+    missingOptionalProviders: providers.filter((provider) => !provider.configured),
+  }
+}
 
 export function getAIEnvironmentDiagnostics() {
   const missing = AI_SETUP_ENV_NAMES.filter((name) => !getOptionalEnv(name))

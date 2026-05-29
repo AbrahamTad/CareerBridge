@@ -1,26 +1,17 @@
 import { getAIProviderKey, getOptionalEnv } from '@/lib/server/env'
 import { AIProviderError, type AIProviderClient, type ProviderRequest } from '../types'
+import { normalizeRequestError, parseProviderError, providerErrorCodeFromStatus } from './utils'
 
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini'
-
-async function parseProviderError(response: Response): Promise<string> {
-  try {
-    const data = await response.json()
-    if (typeof data?.error?.message === 'string') return data.error.message
-    if (typeof data?.error === 'string') return data.error
-    if (typeof data?.message === 'string') return data.message
-  } catch {
-    // Provider error bodies are not guaranteed to be JSON.
-  }
-
-  return response.statusText || 'Provider request failed'
-}
 
 export const openaiProvider: AIProviderClient = {
   name: 'openai',
   envKey: 'OPENAI_API_KEY',
+  modelEnvKey: 'OPENAI_MODEL',
+  defaultModel: DEFAULT_OPENAI_MODEL,
+  defaultBaseUrl: 'https://api.openai.com/v1',
   requiresApiKey: true,
-  priority: 1,
+  priority: 2,
   supportsSwedish: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest): Promise<string> {
     const provider = 'openai'
@@ -50,17 +41,12 @@ export const openaiProvider: AIProviderClient = {
         }),
       })
     } catch (error) {
-      const code = error instanceof DOMException && error.name === 'AbortError' ? 'timeout' : 'request_failed'
-      throw new AIProviderError(
-        code,
-        provider,
-        error instanceof Error ? error.message : 'OpenAI request could not be sent.'
-      )
+      throw normalizeRequestError(provider, error, 'OpenAI request could not be sent.')
     }
 
     if (!response.ok) {
       const message = await parseProviderError(response)
-      throw new AIProviderError(response.status === 401 ? 'invalid_api_key' : 'request_failed', provider, message, response.status)
+      throw new AIProviderError(providerErrorCodeFromStatus(response.status), provider, message, response.status)
     }
 
     const data = await response.json()
@@ -71,8 +57,13 @@ export const openaiProvider: AIProviderClient = {
 
     return text
   },
-  async healthCheck() {
-    getAIProviderKey('openai')
-    return true
+  async healthCheck(signal?: AbortSignal) {
+    const result = await this.complete({
+      system: 'Reply with OK only.',
+      user: 'OK',
+      maxTokens: 8,
+      signal,
+    })
+    return result.trim().length > 0
   },
 }

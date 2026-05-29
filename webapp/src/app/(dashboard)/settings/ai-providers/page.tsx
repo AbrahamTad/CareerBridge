@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Activity, AlertTriangle, CheckCircle2, Loader2, RefreshCcw, XCircle } from 'lucide-react'
 import type { AIHealthSummary, ProviderHealth } from '@/lib/ai/types'
 
 const PROVIDER_LABELS: Record<string, string> = {
+  gemini: 'Gemini',
   openai: 'OpenAI',
   deepseek: 'DeepSeek',
   groq: 'Groq',
@@ -28,6 +29,21 @@ function StatusIcon({ status }: { status: ProviderHealth['status'] }) {
   return <XCircle className="h-4 w-4" />
 }
 
+function statusText(provider: ProviderHealth) {
+  const labels: Record<ProviderHealth['checkStatus'], string> = {
+    working: 'Working',
+    'missing key': 'Missing key',
+    'invalid key': 'Invalid key',
+    'quota exceeded': 'Quota exceeded',
+    timeout: 'Timeout',
+    'server offline': 'Server offline',
+    skipped: 'Skipped',
+    'unknown error': 'Failed',
+  }
+
+  return labels[provider.checkStatus] ?? provider.status
+}
+
 function formatDate(value?: string) {
   if (!value) return 'Ingen historik'
   return new Intl.DateTimeFormat('sv-SE', {
@@ -39,26 +55,50 @@ function formatDate(value?: string) {
 export default function AIProvidersSettingsPage() {
   const [health, setHealth] = useState<AIHealthSummary | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingProvider, setLoadingProvider] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function loadHealth() {
-    setLoading(true)
+  const mergeProviderHealth = useCallback((current: AIHealthSummary, incoming: AIHealthSummary): AIHealthSummary => {
+    const incomingProvider = incoming.providers[0]
+    if (!incomingProvider) return current
+
+    const providers = current.providers.map((provider) =>
+      provider.provider === incomingProvider.provider ? incomingProvider : provider
+    )
+    const activeProvider = providers.find((provider) => provider.available)?.provider ?? null
+
+    return {
+      ...current,
+      [incomingProvider.provider === 'aisweden' ? 'aiSweden' : incomingProvider.provider]: incomingProvider.available,
+      activeProvider,
+      fallbackProvider: incoming.fallbackProvider,
+      providers,
+      checkedAt: incoming.checkedAt,
+      configuredProviders: providers.filter((provider) => provider.configured).length,
+      workingProviders: providers.filter((provider) => provider.available).length,
+    }
+  }, [])
+
+  const loadHealth = useCallback(async (provider?: string) => {
+    if (provider) setLoadingProvider(provider)
+    else setLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/ai/health', { cache: 'no-store' })
+      const response = await fetch(provider ? `/api/ai/health?provider=${provider}` : '/api/ai/health', { cache: 'no-store' })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Kunde inte läsa AI-status')
-      setHealth(data)
+      setHealth((current) => provider && current ? mergeProviderHealth(current, data) : data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Kunde inte läsa AI-status')
     } finally {
-      setLoading(false)
+      if (provider) setLoadingProvider(null)
+      else setLoading(false)
     }
-  }
+  }, [mergeProviderHealth])
 
   useEffect(() => {
     void loadHealth()
-  }, [])
+  }, [loadHealth])
 
   const providers = health?.providers ?? []
   const hasWorkingProvider = (health?.workingProviders ?? 0) > 0
@@ -116,7 +156,7 @@ export default function AIProvidersSettingsPage() {
               </div>
               <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClasses(provider.status)}`}>
                 <StatusIcon status={provider.status} />
-                {provider.status === 'working' ? 'Fungerar' : provider.status === 'warning' ? 'Varning' : 'Saknas'}
+                {statusText(provider)}
               </span>
             </div>
 
@@ -124,6 +164,14 @@ export default function AIProvidersSettingsPage() {
               <div>
                 <dt className="text-xs font-medium uppercase text-slate-400">Konfiguration</dt>
                 <dd className="mt-1 font-medium text-slate-700">{provider.configured ? 'Konfigurerad' : 'Saknas'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-slate-400">Model</dt>
+                <dd className="mt-1 break-words font-medium text-slate-700">{provider.model || 'Default'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-slate-400">Last checked</dt>
+                <dd className="mt-1 font-medium text-slate-700">{formatDate(provider.checkedAt)}</dd>
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase text-slate-400">Svarstid</dt>
@@ -138,6 +186,15 @@ export default function AIProvidersSettingsPage() {
                 <dd className="mt-1 font-medium text-slate-700">{provider.score}/100</dd>
               </div>
             </dl>
+
+            <button
+              onClick={() => void loadHealth(provider.provider)}
+              disabled={loadingProvider === provider.provider}
+              className="mt-4 inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {loadingProvider === provider.provider ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
+              Retry test
+            </button>
 
             {(provider.error || provider.lastError || provider.disabledUntil) && (
               <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">

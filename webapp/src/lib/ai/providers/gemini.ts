@@ -33,8 +33,6 @@ export const geminiProvider: AIProviderClient = {
   baseUrlEnvKey: 'GEMINI_BASE_URL',
   defaultBaseUrl: DEFAULT_BASE_URL,
   requiresApiKey: true,
-  priority: 1,
-  supportsSwedish: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest) {
     const provider = 'gemini'
     let apiKey: string

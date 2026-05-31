@@ -17,8 +17,6 @@ export const groqProvider: AIProviderClient = {
   baseUrlEnvKey: 'GROQ_BASE_URL',
   defaultBaseUrl: DEFAULT_BASE_URL,
   requiresApiKey: true,
-  priority: 4,
-  supportsSwedish: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest) {
     const provider = 'groq'
     let apiKey: string

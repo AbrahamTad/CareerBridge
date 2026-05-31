@@ -39,8 +39,6 @@ export const huggingFaceProvider: AIProviderClient = {
   baseUrlEnvKey: 'HUGGINGFACE_BASE_URL',
   defaultBaseUrl: DEFAULT_BASE_URL,
   requiresApiKey: true,
-  priority: 7,
-  supportsSwedish: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest) {
     const provider = 'huggingface'
     let apiKey: string

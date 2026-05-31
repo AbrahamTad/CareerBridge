@@ -165,11 +165,15 @@ export default function JobsPage() {
 
   useEffect(() => {
     loadProfileLocation()
+    // Bootstrap once on mount; later searches and filter actions refresh jobs explicitly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     const params = buildJobParams({ query, location, liaOnly, remoteOnly })
     loadJobs(params)
+    // Only this toggle should automatically reload the current filter snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showOnlyStrongMatches])
 
   useEffect(() => {

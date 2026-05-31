@@ -144,16 +144,6 @@ function readEnv(name: string): string {
   return (readLocalAIEnv(name) ?? process.env[name] ?? '').trim()
 }
 
-export function getSelectedAIProvider(): AIProvider {
-  const configured = getConfiguredAIProvider()
-
-  if (configured) {
-    return configured
-  }
-
-  return 'gemini'
-}
-
 export function getConfiguredAIProvider(): AIProvider | undefined {
   const configured = readEnv('AI_PROVIDER').toLowerCase()
 
@@ -291,20 +281,6 @@ export function getAIEnvironmentDiagnostics() {
     missing,
     hasAnyRemoteProvider: configured.some((name) => name.endsWith('_API_KEY')),
     hasOllama: configured.includes('OLLAMA_BASE_URL'),
-  }
-}
-
-export function getJobSourceEnvironmentDiagnostics() {
-  const sources = OPTIONAL_JOB_SOURCE_ENV.map((source) => ({
-    ...source,
-    enabled: getBooleanEnv(source.enabledKey, source.defaultEnabled),
-    baseUrl: 'baseUrlKey' in source ? getOptionalEnv(source.baseUrlKey) : undefined,
-  }))
-
-  return {
-    sources,
-    enabledSources: sources.filter((source) => source.enabled),
-    disabledSources: sources.filter((source) => !source.enabled),
   }
 }
 

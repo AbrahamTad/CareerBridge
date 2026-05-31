@@ -41,12 +41,8 @@ export async function diagnoseJobTechTaxonomy(): Promise<JobSourceDiagnostic> {
   const startedAt = Date.now()
   const url = `${jobTechTaxonomyBaseUrl()}/v1/taxonomy/main/concepts?type=occupation-name`
   try {
-    const concepts = await fetchJsonWithRetry<unknown>(url)
-    const count = Array.isArray(concepts)
-      ? concepts.length
-      : concepts && typeof concepts === 'object' && Array.isArray((concepts as { concepts?: unknown[] }).concepts)
-        ? (concepts as { concepts: unknown[] }).concepts.length
-        : 0
+    const concepts = await fetchJobTechOccupationNames()
+    const count = concepts.length
     return { source: 'jobtech-taxonomy', enabled, status: 'working', responseTimeMs: Date.now() - startedAt, details: `${count} occupation-name concepts available.`, url }
   } catch (error) {
     return { source: 'jobtech-taxonomy', enabled, status: 'failed', responseTimeMs: Date.now() - startedAt, details: error instanceof Error ? error.message : String(error), url }

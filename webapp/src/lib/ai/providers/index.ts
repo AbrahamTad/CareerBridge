@@ -63,7 +63,6 @@ export function isProviderConfigured(provider: AIProvider): boolean {
   }
 }
 
-export const isProviderAvailable = isProviderConfigured
 export { parseProviderError }
 
 export function providerLabel(provider: AIProvider) {

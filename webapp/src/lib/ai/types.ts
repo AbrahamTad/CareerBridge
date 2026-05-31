@@ -57,19 +57,9 @@ export interface AIProviderClient {
   baseUrlEnvKey?: string
   defaultBaseUrl?: string
   requiresApiKey: boolean
-  priority: number
-  supportsSwedish?: boolean
   local?: boolean
   complete(request: ProviderRequest): Promise<string>
   healthCheck?(signal?: AbortSignal): Promise<boolean>
-}
-
-export interface ProviderAttemptLog {
-  provider: AIProvider
-  status: 'skipped' | 'success' | 'failed'
-  code?: AIErrorCode
-  httpStatus?: number
-  responseTimeMs: number
 }
 
 export interface ProviderHealth {

@@ -20,25 +20,6 @@ export function formatSalary(min?: number | null, max?: number | null, currency 
   return `Upp till ${max!.toLocaleString('sv-SE')} ${currency}`
 }
 
-export function scoreToTier(score: number): 'strong' | 'medium' | 'weak' {
-  if (score >= 4.0) return 'strong'
-  if (score >= 3.0) return 'medium'
-  return 'weak'
-}
-
-export function tierLabel(tier: string): string {
-  const labels: Record<string, string> = {
-    strong: 'Stark matchning',
-    medium: 'God matchning',
-    weak: 'Svag matchning',
-  }
-  return labels[tier] ?? tier
-}
-
-export function truncate(str: string, length: number): string {
-  return str.length > length ? str.slice(0, length) + '…' : str
-}
-
 export function slugify(text: string): string {
   return text
     .toLowerCase()

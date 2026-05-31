@@ -12,8 +12,6 @@ export const anthropicProvider: AIProviderClient = {
   defaultModel: DEFAULT_ANTHROPIC_MODEL,
   defaultBaseUrl: 'https://api.anthropic.com/v1',
   requiresApiKey: true,
-  priority: 6,
-  supportsSwedish: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest): Promise<string> {
     const provider = 'anthropic'
     let apiKey: string

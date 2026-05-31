@@ -2,7 +2,6 @@ export { AIProviderError, type AIErrorCode, type CompletionRequest } from './typ
 export {
   DEFAULT_PROVIDER_PRIORITY,
   SWEDISH_PROVIDER_PRIORITY,
-  isProviderAvailable,
   isProviderConfigured,
   parseProviderError,
   providerClients,

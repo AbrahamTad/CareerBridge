@@ -17,8 +17,6 @@ export const deepseekProvider: AIProviderClient = {
   baseUrlEnvKey: 'DEEPSEEK_BASE_URL',
   defaultBaseUrl: DEFAULT_BASE_URL,
   requiresApiKey: true,
-  priority: 3,
-  supportsSwedish: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest) {
     const provider = 'deepseek'
     let apiKey: string

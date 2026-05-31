@@ -16,8 +16,6 @@ export const ollamaProvider: AIProviderClient = {
   baseUrlEnvKey: 'OLLAMA_BASE_URL',
   defaultBaseUrl: 'http://localhost:11434',
   requiresApiKey: false,
-  priority: 9,
-  supportsSwedish: true,
   local: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest) {
     const provider = 'ollama'

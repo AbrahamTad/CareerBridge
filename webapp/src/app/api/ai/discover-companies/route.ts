@@ -5,6 +5,7 @@ import { requireAuth, isAuthResponse } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { discoverCompanies, getFriendlyAIError } from '@/lib/ai/service'
 import { uniqueExternalJobs, type ExternalJob } from '@/lib/jobs/jobtech'
+import { isWholeSwedenLocation } from '@/lib/jobs/locations'
 import { searchArbetsformedlingen } from '@/lib/jobs/sources/arbetsformedlingen'
 import { isPastDeadline, pageLooksExpired } from '@/lib/jobs/liveness'
 import { hasReachedAiLimit } from '@/lib/subscription'
@@ -23,10 +24,6 @@ interface DiscoveredCompany {
 
 function cleanJson(text: string) {
   return text.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim()
-}
-
-function isWholeSweden(location: string) {
-  return ['sverige', 'sweden', 'hela sverige'].includes(location.trim().toLowerCase())
 }
 
 function companyKey(name: string) {
@@ -59,7 +56,7 @@ async function findCompaniesFromDatabase(targetRole: string, location: string, l
   const where = {
     isActive: true,
     ...(liaFocus ? { isLia: true } : {}),
-    ...(isWholeSweden(location) || !location ? {} : { location: { contains: location, mode: 'insensitive' as const } }),
+    ...(isWholeSwedenLocation(location) || !location ? {} : { location: { contains: location, mode: 'insensitive' as const } }),
     OR: [
       { title: { contains: targetRole, mode: 'insensitive' as const } },
       { description: { contains: targetRole, mode: 'insensitive' as const } },
@@ -94,7 +91,7 @@ async function findCompaniesFromJobTech(targetRole: string, location: string, li
     : [targetRole]
 
   const results = await Promise.allSettled(
-    terms.map((term) => searchArbetsformedlingen(term, isWholeSweden(location) ? '' : location, 20))
+    terms.map((term) => searchArbetsformedlingen(term, isWholeSwedenLocation(location) ? '' : location, 20))
   )
   const jobs = uniqueExternalJobs(results.flatMap((result) => result.status === 'fulfilled' ? result.value : []))
     .filter((job) => !isPastDeadline(job.closingAt ?? null))

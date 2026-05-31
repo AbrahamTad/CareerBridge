@@ -52,8 +52,6 @@ export const aiSwedenProvider: AIProviderClient = {
   baseUrlEnvKey: 'AI_SWEDEN_BASE_URL',
   defaultBaseUrl: `https://api-inference.huggingface.co/models/${DEFAULT_MODEL}`,
   requiresApiKey: true,
-  priority: 8,
-  supportsSwedish: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest) {
     const provider = 'aisweden'
     let apiKey: string

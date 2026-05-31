@@ -11,8 +11,6 @@ export const openaiProvider: AIProviderClient = {
   defaultModel: DEFAULT_OPENAI_MODEL,
   defaultBaseUrl: 'https://api.openai.com/v1',
   requiresApiKey: true,
-  priority: 2,
-  supportsSwedish: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest): Promise<string> {
     const provider = 'openai'
     let apiKey: string

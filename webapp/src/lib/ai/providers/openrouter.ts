@@ -17,8 +17,6 @@ export const openrouterProvider: AIProviderClient = {
   baseUrlEnvKey: 'OPENROUTER_BASE_URL',
   defaultBaseUrl: DEFAULT_BASE_URL,
   requiresApiKey: true,
-  priority: 5,
-  supportsSwedish: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest) {
     const provider = 'openrouter'
     let apiKey: string

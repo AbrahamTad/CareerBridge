@@ -1,3 +1,4 @@
+// Curated private employer pages used as supplemental Swedish job-search targets.
 import type { JobSource } from '../types'
 import { catalogDiagnostic, catalogSource, isSourceEnabled } from './source-utils'
 
@@ -27,6 +28,7 @@ export function isCompanyCareerPagesEnabled() {
   return isSourceEnabled('ENABLE_COMPANY_CAREER_PAGES')
 }
 
+// Choose care employers for care profiles and tech-focused pages for other sectors.
 export function companyCareerPageSources(term: string, location = '', sectors: string[] = []): JobSource[] {
   const enabled = isCompanyCareerPagesEnabled()
   const searchCare = sectors.some((sector) => /healthcare|care|vård|omsorg|lss/i.test(sector))

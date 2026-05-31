@@ -1,3 +1,4 @@
+// Hugging Face inference adapter for optional hosted text-generation models.
 import { getAIProviderKey, getOptionalEnv } from '@/lib/server/env'
 import { AIProviderError, type AIProviderClient, type ProviderRequest } from '../types'
 import { normalizeBaseUrl, normalizeRequestError, parseProviderError, providerErrorCodeFromStatus } from './utils'
@@ -9,6 +10,7 @@ function buildPrompt(system: string, user: string) {
   return `${system.trim()}\n\nUser request:\n${user.trim()}\n\nAnswer:`
 }
 
+// Accept common generation and summarization response shapes from hosted models.
 function extractText(data: unknown): string | null {
   if (Array.isArray(data)) {
     const first = data[0] as { generated_text?: unknown; summary_text?: unknown } | undefined
@@ -23,6 +25,7 @@ function extractText(data: unknown): string | null {
   return null
 }
 
+// Hugging Face inference routes are model-specific even when a shared base URL is configured.
 function endpointForModel(model: string) {
   const baseUrl = normalizeBaseUrl(getOptionalEnv('HUGGINGFACE_BASE_URL') ?? DEFAULT_BASE_URL)
   return baseUrl.endsWith('/models') ? `${baseUrl}/${model}` : `${baseUrl}/models/${model}`
@@ -44,6 +47,7 @@ export const huggingFaceProvider: AIProviderClient = {
     try {
       apiKey = getAIProviderKey(provider)
     } catch {
+      // A missing optional key skips this provider without breaking later fallbacks.
       throw new AIProviderError('missing_api_key', provider, 'Missing HUGGINGFACE_API_KEY.')
     }
 
@@ -68,6 +72,7 @@ export const huggingFaceProvider: AIProviderClient = {
         }),
       })
     } catch (error) {
+      // Normalize network failures so retry and provider-switch rules remain consistent.
       throw normalizeRequestError(provider, error, 'Hugging Face request could not be sent.')
     }
 

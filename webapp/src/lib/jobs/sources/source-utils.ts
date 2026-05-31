@@ -1,3 +1,4 @@
+// Shared resilience helpers for live APIs and curated Swedish career-page catalogs.
 import { getBooleanEnv, getOptionalEnv } from '@/lib/server/env'
 import type { JobSource, JobSourceCategory, JobSourceDiagnostic, JobSourceKind } from '../types'
 
@@ -5,6 +6,7 @@ export function isSourceEnabled(envKey: string, defaultValue = true) {
   return getBooleanEnv(envKey, defaultValue)
 }
 
+// Keep source timeouts configurable without allowing an unbounded request.
 export function jobSourceTimeoutMs() {
   return Number(getOptionalEnv('JOB_SOURCE_TIMEOUT_MS')) || 10_000
 }
@@ -14,6 +16,7 @@ function jobSourceRetryCount() {
   return configured === undefined ? 1 : Math.max(0, Math.min(3, Number(configured) || 0))
 }
 
+// Retry transient source failures before allowing the caller to continue with partial results.
 export async function fetchJsonWithRetry<T>(url: string, init: RequestInit = {}): Promise<T> {
   let lastError: unknown
 
@@ -35,6 +38,7 @@ export async function fetchJsonWithRetry<T>(url: string, init: RequestInit = {})
   throw lastError instanceof Error ? lastError : new Error('Job source request failed')
 }
 
+// Career pages use different search systems, so provide a site-scoped outbound search link.
 export function sourceSearchUrl(homePageUrl: string, term: string, location = '') {
   const host = new URL(homePageUrl).hostname
   const query = [`site:${host}`, term, location].filter(Boolean).join(' ')
@@ -58,6 +62,7 @@ export function catalogSource(input: {
   }
 }
 
+// Catalog diagnostics confirm configuration; they do not scrape third-party websites.
 export function catalogDiagnostic(source: string, enabled: boolean, count: number, details: string): JobSourceDiagnostic {
   return {
     source,

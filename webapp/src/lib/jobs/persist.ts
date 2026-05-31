@@ -1,7 +1,9 @@
+// Persists normalized external jobs while updating existing records without duplicating ads.
 import prisma from '@/lib/prisma'
 import { slugify } from '@/lib/utils'
 import type { ExternalJob } from './jobtech'
 
+// Upsert source postings and return database IDs for matching and dashboard responses.
 export async function persistExternalJobs(jobs: ExternalJob[]) {
   const ids: string[] = []
   let newCount = 0

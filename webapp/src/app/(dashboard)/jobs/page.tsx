@@ -1,5 +1,6 @@
 'use client'
 
+// Dashboard for searching, ranking, and adapting CVs for Swedish job opportunities.
 import { useState, useEffect, useRef } from 'react'
 import { Search, Filter, Loader2, ExternalLink, BookmarkPlus, BrainCircuit, Sparkles, FileText, Copy, X, MapPin, Download } from 'lucide-react'
 import { toast } from 'sonner'

@@ -1,3 +1,4 @@
+// Location helpers for whole-country searches and nearby municipality expansion.
 import type { Prisma } from '@prisma/client'
 
 export const WEST_SWEDEN_NEARBY_LABEL = 'Västra Götaland'
@@ -35,6 +36,7 @@ export function isWestSwedenNearbyLocation(location: string) {
   return ['vastragotaland', 'vastragoteland', 'vgr', 'westgotaland'].includes(normalized)
 }
 
+// Expand the regional shortcut into municipalities because JobTech searches plain text locations.
 export function expandJobSearchLocations(location: string, maxLocations = 8) {
   const trimmed = location.trim()
   if (!trimmed || isWholeSwedenLocation(trimmed)) return ['']
@@ -48,6 +50,7 @@ export function locationLabelForSearch(location: string) {
   return isWestSwedenNearbyLocation(location) ? WEST_SWEDEN_NEARBY_LABEL : location
 }
 
+// Translate UI location filters into Prisma conditions for persisted job listings.
 export function buildJobLocationWhere(location: string): Prisma.JobListingWhereInput | null {
   const trimmed = location.trim()
   if (!trimmed || isWholeSwedenLocation(trimmed)) return null

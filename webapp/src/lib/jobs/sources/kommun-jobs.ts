@@ -1,3 +1,4 @@
+// Curated municipality career pages for Swedish public-sector job discovery.
 import type { JobSource } from '../types'
 import { catalogDiagnostic, catalogSource, isSourceEnabled } from './source-utils'
 
@@ -18,6 +19,7 @@ export function isKommunJobsEnabled() {
   return isSourceEnabled('ENABLE_KOMMUN_JOBS')
 }
 
+// Build outbound searches because municipality career sites use different platforms.
 export function kommunJobSources(term: string, location = ''): JobSource[] {
   const enabled = isKommunJobsEnabled()
   return KOMMUN_CAREER_PAGES.map(([id, name, homePageUrl]) => catalogSource({

@@ -1,3 +1,4 @@
+// JobTech Taxonomy API adapter used for diagnostics and future taxonomy enrichment.
 import { getOptionalEnv } from '@/lib/server/env'
 import type { JobSourceDiagnostic } from '../types'
 import { fetchJsonWithRetry, isSourceEnabled } from './source-utils'
@@ -18,6 +19,7 @@ export function isJobTechTaxonomyEnabled() {
   return isSourceEnabled('ENABLE_JOBTECH_TAXONOMY')
 }
 
+// Load public occupation names when enabled; local taxonomy remains available as fallback.
 export async function fetchJobTechOccupationNames(): Promise<TaxonomyConcept[]> {
   if (!isJobTechTaxonomyEnabled()) return []
   const url = `${jobTechTaxonomyBaseUrl()}/v1/taxonomy/main/concepts?type=occupation-name`
@@ -29,6 +31,7 @@ export async function fetchJobTechOccupationNames(): Promise<TaxonomyConcept[]> 
   return []
 }
 
+// Report API availability without making the main matching flow depend on this endpoint.
 export async function diagnoseJobTechTaxonomy(): Promise<JobSourceDiagnostic> {
   const enabled = isJobTechTaxonomyEnabled()
   if (!enabled) {

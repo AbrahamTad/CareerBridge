@@ -1,3 +1,4 @@
+// Runs AI requests with timeout, retry, cooldown, diagnostics, and provider fallback handling.
 import { getOptionalEnv, logAIEnvironmentDiagnostics } from '@/lib/server/env'
 import { AIProviderError, type AIErrorCode, type AIHealthSummary, type AIProvider, type AIProviderCheckStatus, type CompletionRequest, type ProviderHealth } from './types'
 import { getFallbackProvider, getProviderPriority } from './provider-router'
@@ -42,6 +43,7 @@ function missingConfigurationCode(provider: AIProvider): AIErrorCode {
   return providerClients[provider].local ? 'missing_configuration' : 'missing_api_key'
 }
 
+// Retry transient failures on the same provider before switching to another provider.
 function shouldRetryProvider(error: unknown) {
   if (!(error instanceof AIProviderError)) return true
   if (error.code === 'missing_api_key' || error.code === 'missing_configuration' || error.code === 'invalid_api_key') return false
@@ -50,6 +52,7 @@ function shouldRetryProvider(error: unknown) {
   return !error.status || error.status >= 500
 }
 
+// Configuration, quota, timeout, and server failures should continue down the fallback list.
 function shouldTryNextProvider(error: unknown) {
   if (!(error instanceof AIProviderError)) return true
   if (error.code === 'missing_api_key' || error.code === 'missing_configuration' || error.code === 'invalid_api_key') return true
@@ -110,6 +113,7 @@ function logProviderAttempt(
   }
 }
 
+// Store sanitized status only; provider responses and secrets must not enter diagnostics.
 function recordProviderAttempt(
   provider: AIProvider,
   status: 'success' | 'failed' | 'skipped',
@@ -194,6 +198,7 @@ async function isLocalProviderReachable(provider: AIProvider): Promise<boolean> 
   }
 }
 
+// Walk the configured provider order until one returns content or all options are unavailable.
 export async function completeWithProviderFallback(request: CompletionRequest): Promise<string> {
   logAIEnvironmentDiagnostics()
   const providers = getProviderPriority(request)
@@ -282,6 +287,7 @@ export async function completeWithProviderFallback(request: CompletionRequest): 
   )
 }
 
+// Probe one provider and convert its result into user-facing diagnostics.
 async function providerHealth(provider: AIProvider): Promise<ProviderHealth> {
   const client = providerClients[provider]
   const startedAt = Date.now()

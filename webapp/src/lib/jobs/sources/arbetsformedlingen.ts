@@ -1,3 +1,4 @@
+// Arbetsformedlingen source adapter for live JobTech imports and Platsbanken outbound links.
 import { getOptionalEnv } from '@/lib/server/env'
 import { searchJobTech } from '../jobtech'
 import type { JobSource, JobSourceDiagnostic } from '../types'
@@ -13,6 +14,7 @@ export function isArbetsformedlingenEnabled() {
   return isSourceEnabled('ENABLE_ARBETSFORMEDLINGEN')
 }
 
+// Give users a direct Platsbanken search link alongside imported API results.
 export function arbetsformedlingenSearchPage(term: string, location = ''): JobSource {
   const params = new URLSearchParams({ q: [term, location].filter(Boolean).join(' ') })
   return {
@@ -27,11 +29,13 @@ export function arbetsformedlingenSearchPage(term: string, location = ''): JobSo
   }
 }
 
+// Honor the environment switch before reaching the public JobTech API.
 export async function searchArbetsformedlingen(term: string, location = '', limit = 25) {
   if (!isArbetsformedlingenEnabled()) return []
   return searchJobTech(term, location, limit)
 }
 
+// Probe one lightweight search result to report whether the live API is reachable.
 export async function diagnoseArbetsformedlingen(): Promise<JobSourceDiagnostic> {
   const enabled = isArbetsformedlingenEnabled()
   if (!enabled) {

@@ -1,3 +1,4 @@
+// CV-driven Swedish job search with taxonomy expansion, caching, and partial-result fallbacks.
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import type { Prisma } from '@prisma/client'
@@ -164,6 +165,7 @@ export async function POST(request: NextRequest) {
   }
 
   const queryText = query || 'cv-driven-search'
+  // Reuse recent equivalent searches unless the dashboard explicitly requests a deeper scan.
   const cachedTask = useCache ? await findCachedTask(auth.dbUserId, queryText, location) : null
   if (cachedTask?.results && typeof cachedTask.results === 'object' && !Array.isArray(cachedTask.results)) {
     return NextResponse.json({ ...(cachedTask.results as Record<string, unknown>), cached: true, taskId: cachedTask.id })
@@ -246,6 +248,7 @@ export async function POST(request: NextRequest) {
   const searchLocations = expandJobSearchLocations(location)
   const expandedLocationSearch = searchLocations.length > 1
   const taxonomyText = `${cvText} ${JSON.stringify(cv.parsedData ?? {})}`
+  // Local taxonomy recommendations enrich search terms even when provider-backed analysis fails.
   const careProfile = hasCareProfile(taxonomyText)
   const localProfessionRecommendations = recommendLocalProfessions(taxonomyText)
   const professionTerms = localProfessionRecommendations
@@ -278,6 +281,7 @@ export async function POST(request: NextRequest) {
     sourceStatuses = searchResult.diagnostics
     sourceCount = searchResult.searchesRun
   } catch {
+    // Source failures degrade to an empty result set so the route can still finish cleanly.
     foundJobs = []
   }
 

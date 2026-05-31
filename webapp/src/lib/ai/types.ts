@@ -1,3 +1,4 @@
+// Shared AI provider contracts for routing, retries, health diagnostics, and task selection.
 import type { AIProvider } from '@/lib/server/env'
 
 export type { AIProvider }
@@ -110,6 +111,7 @@ export interface AIHealthSummary {
   workingProviders: number
 }
 
+// Typed provider failures allow the manager to decide whether to retry or switch providers.
 export class AIProviderError extends Error {
   constructor(
     public code: AIErrorCode,

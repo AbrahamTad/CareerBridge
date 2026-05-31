@@ -1,8 +1,10 @@
+// AI Sweden GPT-SW3 adapter using a Hugging Face-compatible inference endpoint.
 import { getAIProviderKey, getOptionalEnv } from '@/lib/server/env'
 import { AIProviderError, type AIProviderClient, type ProviderRequest } from '../types'
 import { normalizeRequestError, parseProviderError, providerErrorCodeFromStatus } from './utils'
 
 const DEFAULT_MODEL = 'AI-Sweden-Models/gpt-sw3-6.7b-v2-instruct'
+// Keep the short environment value while resolving the hosted model identifier internally.
 const MODEL_ALIASES: Record<string, string> = {
   'gpt-sw3': DEFAULT_MODEL,
 }
@@ -11,6 +13,7 @@ function buildPrompt(system: string, user: string) {
   return `${system.trim()}\n\nUser request:\n${user.trim()}\n\nAnswer:`
 }
 
+// Accept the response variants returned by hosted text-generation endpoints.
 function extractGeneratedText(data: unknown): string | null {
   if (Array.isArray(data)) {
     const first = data[0] as { generated_text?: unknown } | undefined
@@ -28,6 +31,7 @@ function resolveModel(model: string) {
   return MODEL_ALIASES[model.toLowerCase()] ?? model
 }
 
+// Support a dedicated endpoint as well as a shared Hugging Face base URL.
 function endpointForModel(model: string) {
   const configured = getOptionalEnv('AI_SWEDEN_BASE_URL') ?? getOptionalEnv('GPT_SW3_ENDPOINT')
   if (!configured) return `https://api-inference.huggingface.co/models/${model}`
@@ -56,6 +60,7 @@ export const aiSwedenProvider: AIProviderClient = {
     try {
       apiKey = getAIProviderKey(provider)
     } catch {
+      // A typed missing-key error lets the fallback manager skip this optional provider.
       throw new AIProviderError('missing_api_key', provider, 'Missing AI_SWEDEN_API_KEY.')
     }
 
@@ -82,6 +87,7 @@ export const aiSwedenProvider: AIProviderClient = {
         }),
       })
     } catch (error) {
+      // Normalize network failures so retry and provider-switch rules remain consistent.
       throw normalizeRequestError(provider, error, 'AI Sweden request could not be sent.')
     }
 

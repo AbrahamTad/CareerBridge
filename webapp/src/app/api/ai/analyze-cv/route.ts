@@ -1,3 +1,4 @@
+// Analyzes an uploaded CV with AI and falls back to deterministic local extraction.
 import { NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
 import { requireAuth, isAuthResponse } from '@/lib/auth'
@@ -68,6 +69,7 @@ function hasWord(text: string, value: string) {
   return new RegExp(`\\b${escaped}\\b`, 'i').test(text)
 }
 
+// Extract a useful local profile when remote providers are unavailable.
 function localAnalyzeCV(rawText: string): Prisma.InputJsonObject {
   const normalized = rawText.replace(/\s+/g, ' ').trim()
   const skills = KNOWN_SKILLS.filter((skill) => hasWord(rawText, skill))
@@ -105,6 +107,7 @@ function localAnalyzeCV(rawText: string): Prisma.InputJsonObject {
   }
 }
 
+// Store analysis on the CV and synchronize reusable profile fields for later searches.
 async function saveAnalysis(userId: string, cvId: string, parsedData: Prisma.InputJsonObject) {
   await prisma.cV.update({
     where: { id: cvId },

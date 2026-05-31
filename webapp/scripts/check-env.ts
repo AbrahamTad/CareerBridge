@@ -1,3 +1,4 @@
+// Static environment diagnostics: validates configuration without calling external services.
 import { getConfiguredAIProvider, getEnvironmentValidation, getOptionalEnv } from '../src/lib/server/env'
 import { loadEnvFiles, maskValue, sourceFor } from './env-utils'
 

@@ -1,3 +1,4 @@
+// Coordinates live Swedish job imports and curated outbound source links.
 import type { JobListing, JobSource, JobSourceDiagnostic } from '../types'
 import { uniqueExternalJobs } from '../jobtech'
 import { hasCareProfile } from '../profession-taxonomy'
@@ -21,6 +22,7 @@ export interface SwedishJobSearchResult {
   searchesRun: number
 }
 
+// Offentliga Jobb is exposed as an outbound search because it has no imported API adapter.
 function offentligaJobbSource(term: string, location = ''): JobSource {
   return catalogSource({
     id: 'offentliga-jobb',
@@ -35,6 +37,7 @@ function offentligaJobbSource(term: string, location = ''): JobSource {
   })
 }
 
+// Build supplemental career-page links so users can continue searching beyond imported ads.
 export function swedishJobSourceLinks(
   terms: string[],
   location = '',
@@ -43,6 +46,7 @@ export function swedishJobSourceLinks(
 ): JobSource[] {
   const term = terms.find(Boolean) ?? 'jobb'
   const profileText = `${terms.join(' ')} ${sectors.join(' ')}`
+  // Care signals switch private employer links from tech pages to care providers.
   const careProfile = hasCareProfile(profileText)
   const normalizedSectors = careProfile ? [...sectors, 'healthcare'] : sectors
   const sources: JobSource[] = [
@@ -58,6 +62,7 @@ export function swedishJobSourceLinks(
   return sources.filter((source) => source.enabled)
 }
 
+// Import active postings from JobTech while preserving useful results if one search fails.
 export async function aggregateSwedishJobs(
   terms: string[],
   locations: string[],
@@ -72,6 +77,7 @@ export async function aggregateSwedishJobs(
   const settled = await Promise.allSettled(
     searches.map(({ term, location }) => searchArbetsformedlingen(term, location, limit))
   )
+  // Promise.allSettled lets a temporary API failure degrade into partial results.
   const jobs = uniqueExternalJobs(settled.flatMap((result) => result.status === 'fulfilled' ? result.value : []))
   const failures = settled.filter((result) => result.status === 'rejected')
   const enabled = isArbetsformedlingenEnabled()
@@ -105,6 +111,7 @@ export async function aggregateSwedishJobs(
   }
 }
 
+// Run live API probes and static catalog checks for the diagnostics command.
 export async function diagnoseSwedishJobSources() {
   return Promise.all([
     diagnoseArbetsformedlingen(),

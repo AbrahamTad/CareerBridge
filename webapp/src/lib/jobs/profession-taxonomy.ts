@@ -1,3 +1,4 @@
+// Local Swedish profession taxonomy used for offline CV matching and search expansion.
 import type { ProfessionRecommendation, ProfessionTaxonomyItem } from './types'
 
 const DEFAULT_EDUCATION = ['Gymnasium', 'YH', 'Bachelor', 'Master', 'Relevant experience']
@@ -5,6 +6,7 @@ const DEFAULT_LEVELS: ProfessionTaxonomyItem['careerLevel'] = ['Junior', 'Mid', 
 const DEFAULT_JOB_TYPES: ProfessionTaxonomyItem['jobTypes'] = ['jobb', 'LIA', 'praktik', 'internship', 'trainee']
 const DEFAULT_SIGNALS: ProfessionTaxonomyItem['matchSignals'] = ['skills', 'experience', 'education', 'certificates', 'languages']
 
+// Compact pipe-separated lists keep the taxonomy maintainable while producing structured items below.
 const CATEGORY_PROFESSIONS: Record<string, string> = {
   'Vård & omsorg': 'Undersköterska|Vårdbiträde|Hemtjänstpersonal|Sjuksköterska|Specialistsjuksköterska|Barnmorska|Läkare|Tandläkare|Tandsköterska|Tandhygienist|Fysioterapeut|Arbetsterapeut|Vårdadministratör|Medicinsk sekreterare|Ambulanssjukvårdare|Operationssjuksköterska|Distriktssköterska|Psykiatrisjuksköterska|Skötare psykiatri|Rehabiliteringsassistent|Vårdbiträde äldreomsorg|Omsorgsassistent|Hälso- och sjukvårdskurator|Dietist|Logoped',
   'LSS & funktionsstöd': 'Stödassistent|Stödpedagog|Personlig assistent|Boendestödjare|Omsorgsassistent|LSS-handläggare|Avlösare|Ledsagare|Kontaktperson|Aktivitetscoach LSS|Daglig verksamhet personal|Gruppboende personal|Serviceboende personal|Funktionsstödsassistent|Socialpedagog LSS|Behandlingsassistent LSS|Boendehandledare|Korttidsboende personal|Personligt ombud|Specialistundersköterska funktionsstöd|Arbetskonsulent daglig verksamhet|Verksamhetspedagog|Habiliteringsassistent|Omsorgspedagog|Stödperson',
@@ -34,6 +36,7 @@ const CATEGORY_PROFESSIONS: Record<string, string> = {
   'Automotive & Aviation': 'Bilmekaniker|Fordonstekniker|Lastbilsmekaniker|Bussmekaniker|Flygmekaniker|Flygtekniker|Pilot|Kabinpersonal|Tågtekniker|Däckmontör|Skadetekniker|Billackerare|Servicerådgivare bil|Reservdelsman|Besiktningstekniker|Fordonselektriker|Diagnostekniker|Motortekniker|Plåtslagare bil|Verkstadschef|Fleet Manager|Fordonsingenjör|Flygledare|Drönarpilot|Trafikflygarinstruktör',
 }
 
+// Care profiles receive this exact role order before general taxonomy scoring.
 const CARE_PRIORITY = [
   'Undersköterska',
   'Stödassistent',
@@ -49,6 +52,7 @@ const CARE_PRIORITY = [
 
 const CARE_SIGNALS = ['vård', 'omsorg', 'lss', 'äldreomsorg', 'undersköterska', 'hemtjänst', 'boendestöd', 'funktionsstöd', 'personlig assistent']
 
+// Common roles get richer matching signals than the generated defaults.
 const PROFESSION_OVERRIDES: Record<string, Partial<ProfessionTaxonomyItem>> = {
   'Frontend Developer': {
     keywords: ['react', 'javascript', 'typescript', 'html', 'css', 'frontend'],
@@ -68,6 +72,7 @@ const PROFESSION_OVERRIDES: Record<string, Partial<ProfessionTaxonomyItem>> = {
   },
 }
 
+// Normalize Swedish accents and punctuation so user text and taxonomy terms compare consistently.
 function normalize(text: string) {
   return text
     .toLowerCase()
@@ -86,6 +91,7 @@ function defaultKeywords(profession: string) {
   return unique([normalized, ...normalized.split(' ').filter((part) => part.length > 2)])
 }
 
+// Expand the compact catalog into the public structured taxonomy requested by the matching flow.
 export const LOCAL_PROFESSION_TAXONOMY: ProfessionTaxonomyItem[] = Object.entries(CATEGORY_PROFESSIONS)
   .flatMap(([category, professions]) => professions.split('|').map((profession) => {
     const override = PROFESSION_OVERRIDES[profession] ?? {}
@@ -120,6 +126,7 @@ export function hasCareProfile(text: string) {
   return matchesText(text, CARE_SIGNALS).length > 0
 }
 
+// Recommend professions locally so job search still works without an AI provider.
 export function recommendLocalProfessions(text: string, limit = 12): ProfessionRecommendation[] {
   const careProfile = hasCareProfile(text)
   const careRecommendations = careProfile
@@ -149,6 +156,7 @@ export function recommendLocalProfessions(text: string, limit = 12): ProfessionR
   return uniqueRecommendations([...careRecommendations, ...scored]).slice(0, limit)
 }
 
+// Keep diagnostics lightweight: counts and the care order are enough to validate configuration.
 export function taxonomySummary() {
   return {
     categories: Object.keys(CATEGORY_PROFESSIONS).length,

@@ -1,3 +1,4 @@
+// Curated pages for LIA, praktik, internship, and trainee opportunities.
 import type { JobSource } from '../types'
 import { catalogDiagnostic, catalogSource, isSourceEnabled } from './source-utils'
 
@@ -15,6 +16,7 @@ export function isLiaPraktikSearchEnabled() {
 
 export function liaPraktikSources(term: string, location = ''): JobSource[] {
   const enabled = isLiaPraktikSearchEnabled()
+  // Expand the role with common placement terms used across Swedish and English pages.
   const opportunityTerm = `${term} LIA praktik internship trainee`
   return LIA_PRAKTIK_PAGES.map(([id, name, homePageUrl]) => catalogSource({
     id,

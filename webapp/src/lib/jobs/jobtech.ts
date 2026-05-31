@@ -1,3 +1,4 @@
+// JobTech JobSearch API adapter that normalizes Arbetsformedlingen postings for CareerBridge.
 import { getOptionalEnv } from '@/lib/server/env'
 import { fetchJsonWithRetry, isSourceEnabled } from './sources/source-utils'
 import type { JobListing } from './types'
@@ -43,10 +44,12 @@ function compact(values: Array<string | null | undefined>): string[] {
 
 function buildQuery(term: string, location?: string): string {
   const normalizedLocation = location?.trim().toLowerCase()
+  // Omitting a whole-country label lets JobTech search all of Sweden.
   const area = normalizedLocation === 'sverige' || normalizedLocation === 'sweden' ? '' : location
   return compact([term, area]).join(' ')
 }
 
+// Fetch active JobTech ads. Timeout and retry handling live in the shared source utility.
 export async function searchJobTech(term: string, location = '', limit = 25): Promise<ExternalJob[]> {
   if (!isSourceEnabled('ENABLE_ARBETSFORMEDLINGEN')) return []
   const q = buildQuery(term, location)
@@ -95,6 +98,7 @@ export async function searchJobTech(term: string, location = '', limit = 25): Pr
     })
 }
 
+// The same posting can appear in several searches, so deduplicate before persistence.
 export function uniqueExternalJobs(jobs: ExternalJob[]): ExternalJob[] {
   const seen = new Set<string>()
   const unique: ExternalJob[] = []

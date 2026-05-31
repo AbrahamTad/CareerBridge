@@ -1,3 +1,4 @@
+// Registers AI providers and defines the fallback order for general and Swedish tasks.
 import { getAIProviderKey, getOptionalEnv } from '@/lib/server/env'
 import type { AIProvider, AIProviderClient } from '../types'
 import { anthropicProvider } from './anthropic'
@@ -11,6 +12,7 @@ import { openaiProvider } from './openai'
 import { openrouterProvider } from './openrouter'
 import { parseProviderError } from './utils'
 
+// General tasks prefer the established providers before optional specialist providers.
 export const DEFAULT_PROVIDER_PRIORITY: AIProvider[] = [
   'gemini',
   'openai',
@@ -23,6 +25,7 @@ export const DEFAULT_PROVIDER_PRIORITY: AIProvider[] = [
   'ollama',
 ]
 
+// Swedish writing and matching tasks try GPT-SW3 and Hugging Face first.
 export const SWEDISH_PROVIDER_PRIORITY: AIProvider[] = [
   'aisweden',
   'huggingface',
@@ -47,6 +50,7 @@ export const providerClients: Record<AIProvider, AIProviderClient> = {
   ollama: ollamaProvider,
 }
 
+// Missing optional API keys are treated as unavailable providers, not application errors.
 export function isProviderConfigured(provider: AIProvider): boolean {
   const client = providerClients[provider]
   if (provider === 'ollama') return Boolean(getOptionalEnv('OLLAMA_BASE_URL'))

@@ -1,3 +1,4 @@
+// Server-side environment loading and validation for app services, AI providers, and job sources.
 import fs from 'fs'
 import path from 'path'
 
@@ -12,6 +13,7 @@ export type AIProvider =
   | 'anthropic'
   | 'ollama'
 
+// Only these names may be read from local env files by this helper.
 const AI_ENV_NAMES = new Set([
   'AI_PROVIDER',
   'NEXT_PUBLIC_SUPABASE_URL',
@@ -125,6 +127,7 @@ function parseEnvFile(filePath: string): Record<string, string> {
   }, {})
 }
 
+// Read local env files in development so diagnostics match the Next.js runtime configuration.
 function readLocalAIEnv(name: string): string | undefined {
   if (process.env.NODE_ENV === 'production') return undefined
 
@@ -194,6 +197,7 @@ export function getAIProviderKey(provider: AIProvider): string {
   const key = readEnv(envName)
 
   if (!key) {
+    // Preserve support for the older Hugging Face token name during migration.
     const legacyKey = provider === 'huggingface' ? readEnv('HUGGINGFACE_API_TOKEN') : ''
     if (legacyKey) return legacyKey
     throw new Error(`Missing ${envName}.`)
@@ -207,6 +211,7 @@ export function getOptionalEnv(name: string): string | undefined {
   return value || undefined
 }
 
+// Environment switches accept common false-like values and default consistently.
 export function getBooleanEnv(name: string, defaultValue = false): boolean {
   const value = getOptionalEnv(name)
   if (!value) return defaultValue
@@ -235,6 +240,7 @@ const AI_SETUP_ENV_NAMES = [
   'OLLAMA_BASE_URL',
 ]
 
+// Validate presence and URL shape without logging secret values.
 export function getEnvironmentValidation() {
   const required = REQUIRED_ENV_GROUPS.map((group) => {
     const configured = group.vars.filter((name) => Boolean(getOptionalEnv(name)))
@@ -316,6 +322,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 let loggedAIEnvironmentDiagnostics = false
 
+// Log provider availability once per process without exposing API keys.
 export function logAIEnvironmentDiagnostics() {
   if (loggedAIEnvironmentDiagnostics) return
   loggedAIEnvironmentDiagnostics = true

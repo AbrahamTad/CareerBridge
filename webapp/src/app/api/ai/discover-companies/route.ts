@@ -1,3 +1,4 @@
+// Discovers employers from active ads first, then optionally enriches them with AI wording.
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { requireAuth, isAuthResponse } from '@/lib/auth'
@@ -86,6 +87,7 @@ async function findCompaniesFromDatabase(targetRole: string, location: string, l
   }))
 }
 
+// Query live JobTech postings and ignore expired opportunities before presenting employers.
 async function findCompaniesFromJobTech(targetRole: string, location: string, liaFocus: boolean) {
   const terms = liaFocus
     ? [targetRole, `${targetRole} LIA`, `${targetRole} praktik`, `${targetRole} trainee`]
@@ -127,6 +129,7 @@ function parseAiCompanies(text: string): DiscoveredCompany[] {
   return Array.isArray(parsed) ? parsed : []
 }
 
+// AI may improve descriptions, but it cannot introduce employers without an active source match.
 function filterAiToActiveSources(aiCompanies: DiscoveredCompany[], sourceCompanies: DiscoveredCompany[]) {
   const sourceNames = new Set(sourceCompanies.map((company) => companyKey(company.name)))
   return aiCompanies.filter((company) => sourceNames.has(companyKey(company.name)))

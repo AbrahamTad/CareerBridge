@@ -18,6 +18,10 @@ export async function extractMarkdownFromFile(
   return { rawMarkdown, cleanedMarkdown, structuredData }
 }
 
+/**
+ * Extract plain text from common CV upload formats when Markdown conversion is not needed.
+ * Unsupported formats fail early so the upload route can show a clear validation error.
+ */
 export async function extractTextFromFile(
   buffer: Buffer,
   mimeType: string
@@ -166,8 +170,10 @@ export function parseCVProfile(text: string): CVProfile {
   if (hasEducationExperience) targetRoles.push('Lärare', 'Pedagog')
   if (hasTradesExperience) targetRoles.push('Tekniker')
   if (!targetRoles.length && techStack.length) targetRoles.push('Systemutvecklare', 'Software Developer')
+  // Add taxonomy recommendations so uploaded CVs can drive Swedish searches without an AI call.
   const professions = recommendLocalProfessions(text)
   const taxonomyRoles = professions.map((recommendation) => recommendation.profession)
+  // Care profiles preserve the requested care-role order ahead of general recommendations.
   const prioritizedTargetRoles = Array.from(new Set([
     ...(hasCareProfile(text) ? taxonomyRoles : []),
     ...targetRoles,

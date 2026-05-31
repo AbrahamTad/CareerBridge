@@ -1,3 +1,4 @@
+// Generates personligt brev, LIA/praktik letters, and short editable application emails.
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { requireAuth, isAuthResponse } from '@/lib/auth'
@@ -14,6 +15,7 @@ import { hasReachedAiLimit } from '@/lib/subscription'
 
 type DocumentType = 'cover-letter' | 'lia-praktik-letter' | 'email-application'
 
+// Build a conservative local draft when every configured AI provider is unavailable.
 function buildLocalCoverLetter(jobTitle: string, companyName: string, jobDescription: string, language: string, documentType: DocumentType) {
   const keywords = Array.from(new Set(jobDescription.match(/\b[A-Za-zÅÄÖåäö0-9+#.]{4,}\b/g) ?? []))
     .slice(0, 10)
@@ -58,6 +60,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const { jobTitle, companyName, jobDescription, language = 'sv', tone = 'professional' } = body
   const documentType: DocumentType =
+    // Accept only known document types at the API boundary.
     body.documentType === 'lia-praktik-letter' || body.documentType === 'email-application'
       ? body.documentType
       : 'cover-letter'
@@ -76,6 +79,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const cvText = getCvText(cv)
+    // Route each document type to a focused prompt while keeping one persistence flow.
     const content =
       documentType === 'lia-praktik-letter'
         ? await generateLiaPraktikLetter(cvText, jobTitle, companyName, jobDescription, language as 'en' | 'sv')

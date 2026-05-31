@@ -1,5 +1,6 @@
 'use client'
 
+// User-facing editor for AI-generated letters and short application emails.
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Mail, Loader2, Copy, RotateCcw, Download } from 'lucide-react'

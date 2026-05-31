@@ -1,3 +1,4 @@
+// Shared contracts for Swedish job discovery, profession mapping, and CV matching.
 export type JobOpportunityType = 'jobb' | 'LIA' | 'praktik' | 'internship' | 'trainee'
 
 export type JobSourceKind =
@@ -21,6 +22,7 @@ export type JobSourceCategory =
   | 'company'
   | 'lia-praktik'
 
+// Describes a searchable source link, including sources that do not expose a public API.
 export interface JobSource {
   id: string
   name: string
@@ -41,6 +43,7 @@ export interface JobSourceDiagnostic {
   url?: string
 }
 
+// Normalized job data keeps source adapters independent from Prisma and the UI.
 export interface JobListing {
   externalId: string
   sourceAts: string
@@ -61,6 +64,7 @@ export interface JobListing {
   closingAt?: Date | null
 }
 
+// The taxonomy item shape supports deterministic matching when AI providers are unavailable.
 export interface ProfessionTaxonomyItem {
   category: string
   profession: string

@@ -1,3 +1,4 @@
+// Live diagnostics for optional AI providers, Swedish job APIs, and local taxonomy coverage.
 import { getAIHealth } from '../src/lib/ai/provider-manager'
 import { providerLabel } from '../src/lib/ai/providers'
 import { taxonomySummary } from '../src/lib/jobs/profession-taxonomy'
@@ -10,6 +11,7 @@ async function main() {
   console.log('CareerBridge integration diagnostics')
   console.log('')
 
+  // Provider and source checks are independent, so run them concurrently.
   const [aiHealth, sourceDiagnostics] = await Promise.all([
     getAIHealth(),
     diagnoseSwedishJobSources(),
@@ -33,6 +35,7 @@ async function main() {
   console.log(`AI providers working: ${aiHealth.workingProviders}/${aiHealth.configuredProviders}`)
   console.log(`Job sources enabled: ${sourceDiagnostics.filter((source) => source.enabled).length}/${sourceDiagnostics.length}`)
 
+  // Static catalogs are allowed to be configured; only enabled live source failures fail the command.
   if (sourceDiagnostics.some((source) => source.enabled && source.status === 'failed')) {
     process.exitCode = 1
   }

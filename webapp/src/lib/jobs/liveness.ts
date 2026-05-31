@@ -1,3 +1,4 @@
+// Checks closing dates and source pages so expired jobs are hidden from active results.
 import prisma from '@/lib/prisma'
 
 const EXPIRED_TEXT_PATTERNS = [
@@ -18,6 +19,7 @@ export function isPastDeadline(value: Date | null) {
   return value < today
 }
 
+// Treat page checks as advisory: network failures must not remove valid jobs.
 export async function pageLooksExpired(url: string) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 3500)
@@ -42,6 +44,7 @@ export async function pageLooksExpired(url: string) {
   }
 }
 
+// Mark expired records inactive while retaining them for history and diagnostics.
 export async function verifyActiveJobIds(jobIds: string[], maxChecks = 12) {
   const jobs = await prisma.jobListing.findMany({
     where: { id: { in: jobIds } },

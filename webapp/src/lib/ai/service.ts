@@ -1,3 +1,4 @@
+// High-level AI tasks used by CV analysis, matching, adaptation, and application writing.
 import { completeWithFallback } from './fallback-manager'
 import { detectContentLanguage } from './language-detector'
 import { providerLabel } from './providers/index'
@@ -25,6 +26,7 @@ function safeLogAIError(error: AIProviderError) {
   })
 }
 
+// Convert provider failures into safe messages for API responses without exposing secrets.
 export function getFriendlyAIError(error: unknown, fallback = 'AI request failed') {
   if (!(error instanceof AIProviderError)) {
     return { message: fallback, status: 500 }
@@ -175,6 +177,7 @@ export async function generateCoverLetter(
   })
 }
 
+// Generate an honest placement letter for Swedish LIA, praktik, internship, or trainee roles.
 export async function generateLiaPraktikLetter(
   cvText: string,
   role: string,
@@ -196,6 +199,7 @@ Use only facts from the CV. Explain the candidate's education, relevant skills, 
   })
 }
 
+// Generate a short email that the user can review and send manually.
 export async function generateEmailApplication(
   cvText: string,
   role: string,
@@ -217,6 +221,7 @@ Use only facts from the CV. Include a clear subject line, a compact message, and
   })
 }
 
+// Recommend professions and workplaces while keeping the response grounded in the CV.
 export async function recommendProfessionsWithAI(cvText: string): Promise<string> {
   return complete({
     maxTokens: 1024,
@@ -233,6 +238,7 @@ Keep recommendations grounded in the CV. For care, LSS, äldreomsorg, or undersk
   })
 }
 
+// Suggest realistic courses and certificates without inventing legal requirements.
 export async function generateUpskillingSuggestions(cvText: string, targetRole: string): Promise<string> {
   return complete({
     maxTokens: 1024,
@@ -251,6 +257,7 @@ Do not claim that a certificate is legally required unless that is explicit and 
   })
 }
 
+// Improve Swedish wording while preserving every factual claim from the source document.
 export async function improveSwedishText(text: string): Promise<string> {
   return complete({
     maxTokens: 1536,

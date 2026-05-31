@@ -1,8 +1,10 @@
+// Chooses provider order from explicit configuration and detected document language.
 import { getConfiguredAIProvider } from '@/lib/server/env'
 import { detectContentLanguage, prefersNordicModel } from './language-detector'
 import type { AIProvider, CompletionRequest } from './types'
 import { DEFAULT_PROVIDER_PRIORITY, SWEDISH_PROVIDER_PRIORITY } from './providers/index'
 
+// Swedish content prefers Nordic-capable providers while preserving the configured override.
 export function getProviderPriority(request?: Pick<CompletionRequest, 'system' | 'user' | 'languageHint'>): AIProvider[] {
   let configured: AIProvider | undefined
   try {

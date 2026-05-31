@@ -1,3 +1,4 @@
+// Backward-compatible entry point for UI callers that need Swedish outbound source links.
 import { swedishJobSourceLinks } from './sources'
 
 export type { JobSource, JobSourceCategory } from './types'

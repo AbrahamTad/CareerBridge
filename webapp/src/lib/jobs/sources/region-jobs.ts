@@ -1,3 +1,4 @@
+// Curated region career pages for healthcare, service, and administration roles.
 import type { JobSource } from '../types'
 import { catalogDiagnostic, catalogSource, isSourceEnabled } from './source-utils'
 
@@ -13,6 +14,7 @@ export function isRegionJobsEnabled() {
   return isSourceEnabled('ENABLE_REGION_JOBS')
 }
 
+// Build outbound searches because region career sites use different platforms.
 export function regionJobSources(term: string, location = ''): JobSource[] {
   const enabled = isRegionJobsEnabled()
   return REGION_CAREER_PAGES.map(([id, name, homePageUrl]) => catalogSource({

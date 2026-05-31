@@ -1,5 +1,7 @@
 // CV text extraction and structured parsing from uploaded files
 import { convertToMarkdown, cleanMarkdown, extractCVStructure } from '@/lib/cv/markitdown-service'
+import { hasCareProfile, recommendLocalProfessions } from '@/lib/jobs/profession-taxonomy'
+import type { CVProfile as SwedishCVProfile } from '@/lib/jobs/types'
 export type { CVStructuredData } from '@/lib/cv/markitdown-service'
 
 /**
@@ -52,7 +54,7 @@ export function validateCVText(text: string): { valid: boolean; error?: string }
   return { valid: true }
 }
 
-export interface CVProfile {
+export interface CVProfile extends SwedishCVProfile {
   techStack: string[]
   healthcareStack: string[]
   educationStack: string[]
@@ -102,6 +104,7 @@ const EDUCATION_KEYWORDS = ['lärare', 'pedagog', 'förskollärare', 'specialped
 const TRADES_KEYWORDS = ['elektriker', 'snickare', 'bilmekaniker', 'fordonstekniker', 'kock', 'lager', 'truckkort']
 
 const YH_SIGNALS = ['yrkeshögskola', 'yh', 'medieinstitutet', 'lia', 'lärande i arbete']
+const CERTIFICATE_SIGNALS = ['b-körkort', 'körkort', 'truckkort', 'delegering', 'hlr', 'brandutbildning', 'legitimation', 'undersköterskebevis', 'certifikat']
 const SWEDEN_LOCATIONS = ['göteborg', 'stockholm', 'malmö', 'lund', 'uppsala', 'gothenburg', 'sweden', 'sverige']
 
 /**
@@ -128,6 +131,7 @@ export function parseCVProfile(text: string): CVProfile {
   if (/\b(arabic|arabiska)\b/i.test(text)) languages.push('Arabic')
 
   const isLIAEligible = YH_SIGNALS.some((s) => lower.includes(s))
+  const certificates = CERTIFICATE_SIGNALS.filter((s) => lower.includes(s))
   const hasFrontendExperience = FRONTEND_SIGNALS.filter((s) => lower.includes(s)).length >= 3
   const hasQAExperience = QA_SIGNALS.filter((s) => lower.includes(s)).length >= 2
   const hasAIExperience = AI_SIGNALS.filter((s) => lower.includes(s)).length >= 2
@@ -162,8 +166,28 @@ export function parseCVProfile(text: string): CVProfile {
   if (hasEducationExperience) targetRoles.push('Lärare', 'Pedagog')
   if (hasTradesExperience) targetRoles.push('Tekniker')
   if (!targetRoles.length && techStack.length) targetRoles.push('Systemutvecklare', 'Software Developer')
+  const professions = recommendLocalProfessions(text)
+  const taxonomyRoles = professions.map((recommendation) => recommendation.profession)
+  const prioritizedTargetRoles = Array.from(new Set([
+    ...(hasCareProfile(text) ? taxonomyRoles : []),
+    ...targetRoles,
+    ...taxonomyRoles,
+  ])).slice(0, hasCareProfile(text) ? 12 : 8)
+  const sectors = Array.from(new Set(professions.map((recommendation) => recommendation.category)))
+  const careerLevel: CVProfile['careerLevel'] =
+    seniorityLevel === 'junior' ? 'Junior'
+    : seniorityLevel === 'senior' ? 'Senior'
+    : 'Mid'
 
   return {
+    skills: [...techStack, ...healthcareStack, ...educationStack, ...tradesStack],
+    education: [],
+    workExperience: [],
+    certificates,
+    careerLevel,
+    sectors,
+    professions,
+    jobTypes: isLIAEligible ? ['jobb', 'LIA', 'praktik', 'internship', 'trainee'] : ['jobb'],
     techStack,
     healthcareStack,
     educationStack,
@@ -180,7 +204,7 @@ export function parseCVProfile(text: string): CVProfile {
     swedishLevel,
     locationMentioned,
     seniorityLevel,
-    targetRoles,
+    targetRoles: prioritizedTargetRoles,
   }
 }
 
@@ -201,6 +225,10 @@ export function cvProfileToParsedData(profile: CVProfile): Record<string, unknow
     targetRoles: profile.targetRoles,
     seniorityLevel: profile.seniorityLevel,
     isLIAEligible: profile.isLIAEligible,
+    certificates: profile.certificates,
+    sectors: profile.sectors,
+    professionRecommendations: profile.professions,
+    jobTypes: profile.jobTypes,
     source: 'local-cv-parser',
   }
 }

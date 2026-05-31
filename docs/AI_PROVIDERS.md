@@ -16,6 +16,8 @@ Fallback order:
 
 Optional providers can be missing. The app should only stop when required app infrastructure variables are missing, such as Supabase or database connection variables.
 
+For Swedish or mixed-language requests, configured AI Sweden and Hugging Face providers move to the front of the automatic chain. An explicit `AI_PROVIDER` override still remains first.
+
 ## Configure
 
 Use `webapp/.env.local` for real local webapp secrets. Keep `webapp/.env.example` as a public template only.
@@ -73,8 +75,8 @@ Never commit `.env`, `.env.local`, or real API keys. The diagnostics scripts mas
 | Groq | `GROQ_API_KEY`, `GROQ_MODEL`, `GROQ_BASE_URL` | OpenAI-compatible and fast. Default base URL: `https://api.groq.com/openai/v1`. Console: https://console.groq.com/ |
 | OpenRouter | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_BASE_URL` | Routes to many models. Default base URL: `https://openrouter.ai/api/v1`. Keys: https://openrouter.ai/settings/keys |
 | Anthropic | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Default in code is `claude-3-5-haiku-latest` if no model is set. Keys: https://console.anthropic.com/settings/keys |
-| Hugging Face | `HUGGINGFACE_API_KEY`, `HUGGINGFACE_MODEL` | `HUGGINGFACE_API_TOKEN` is still accepted as a legacy alias. Tokens: https://huggingface.co/settings/tokens |
-| AI Sweden | `AI_SWEDEN_API_KEY`, `AI_SWEDEN_MODEL`, `AI_SWEDEN_BASE_URL` | Uses an inference endpoint for GPT-SW3-compatible text generation. Legacy aliases `GPT_SW3_MODEL` and `GPT_SW3_ENDPOINT` still work. |
+| Hugging Face | `HUGGINGFACE_API_KEY`, `HUGGINGFACE_BASE_URL`, `HUGGINGFACE_MODEL` | Default base URL: `https://api-inference.huggingface.co`. `HUGGINGFACE_API_TOKEN` is still accepted as a legacy alias. Tokens: https://huggingface.co/settings/tokens |
+| AI Sweden | `AI_SWEDEN_API_KEY`, `AI_SWEDEN_MODEL`, `AI_SWEDEN_BASE_URL` | Uses an inference endpoint for GPT-SW3-compatible text generation. `AI_SWEDEN_MODEL=gpt-sw3` maps to the default GPT-SW3 instruct model. Legacy aliases `GPT_SW3_MODEL` and `GPT_SW3_ENDPOINT` still work. |
 | Ollama | `OLLAMA_BASE_URL`, `OLLAMA_MODEL` | Local provider. Default URL is `http://localhost:11434`, model `llama3.1`. |
 
 ## Health Checks
@@ -84,10 +86,13 @@ Run:
 ```bash
 npm run check:env
 npm run check:apis
+npm run check:integrations
 npm run test:ai
 ```
 
 `check:apis` skips missing providers and sends a tiny live request to configured providers. Status values are:
+
+`check:integrations` runs the provider checks and also verifies the Arbetsförmedlingen JobSearch API, JobTech Taxonomy API, and configured Swedish career-page catalogs.
 
 - `working`
 - `missing key`

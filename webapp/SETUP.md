@@ -57,7 +57,21 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
 DATABASE_URL=postgresql://postgres.xxxx:password@aws-0-eu-north-1.pooler.supabase.com:6543/postgres?pgbouncer=true
 DIRECT_URL=postgresql://postgres.xxxx:password@aws-0-eu-north-1.pooler.supabase.com:5432/postgres
 ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...         # optional, for future features
+OPENAI_API_KEY=sk-...
+AI_SWEDEN_API_KEY=            # optional GPT-SW3 provider
+AI_SWEDEN_BASE_URL=
+AI_SWEDEN_MODEL=gpt-sw3
+HUGGINGFACE_API_KEY=          # optional Hugging Face provider
+HUGGINGFACE_BASE_URL=https://api-inference.huggingface.co
+HUGGINGFACE_MODEL=
+ARBETSFORMEDLINGEN_JOBSEARCH_BASE_URL=https://jobsearch.api.jobtechdev.se
+JOBTECH_TAXONOMY_BASE_URL=https://taxonomy.api.jobtechdev.se
+ENABLE_ARBETSFORMEDLINGEN=true
+ENABLE_JOBTECH_TAXONOMY=true
+ENABLE_KOMMUN_JOBS=true
+ENABLE_REGION_JOBS=true
+ENABLE_COMPANY_CAREER_PAGES=true
+ENABLE_LIA_PRAKTIK_SEARCH=true
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXTAUTH_SECRET=run: openssl rand -base64 32
 ```
@@ -209,6 +223,9 @@ webapp/
 - [x] AI cover letter generator (Swedish + English)
 - [x] AI CV adaptation per job
 - [x] AI company discovery with outreach messages
+- [x] Arbetsförmedlingen/JobTech import plus Swedish kommun, region, employer, and LIA/praktik source catalogs
+- [x] Local Swedish profession taxonomy with 650 professions across 26 industries
+- [x] Personligt brev, LIA/praktik letter, and short application email generation
 - [x] Job scanner (Greenhouse API)
 - [x] Application tracker with status management
 - [x] User profile management

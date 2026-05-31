@@ -59,6 +59,12 @@ interface SmartSearchResult {
   demoMode?: boolean
   canRunDeeper?: boolean
   jobIds?: string[]
+  additionalSources?: Array<{
+    id: string
+    name: string
+    description: string
+    url: string
+  }>
 }
 
 type SmartSearchApiResponse = Partial<SmartSearchResult> & {
@@ -616,6 +622,27 @@ export default function JobsPage() {
             </div>
             <button onClick={() => setLastSmartResult(null)} className="shrink-0 text-blue-400 hover:text-blue-600">✕</button>
           </div>
+          {lastSmartResult.additionalSources?.length ? (
+            <details className="mt-3 border-t border-blue-200 pt-3">
+              <summary className="cursor-pointer text-xs font-semibold text-blue-900">
+                Visa fler svenska jobbkällor ({lastSmartResult.additionalSources.length})
+              </summary>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {lastSmartResult.additionalSources.map((source) => (
+                  <a
+                    key={source.id}
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-lg border border-blue-100 bg-white p-3 text-xs text-slate-700 hover:border-blue-300 hover:shadow-sm"
+                  >
+                    <span className="font-semibold text-blue-800">{source.name}</span>
+                    <span className="mt-1 block text-slate-500">{source.description}</span>
+                  </a>
+                ))}
+              </div>
+            </details>
+          ) : null}
         </div>
       )}
 

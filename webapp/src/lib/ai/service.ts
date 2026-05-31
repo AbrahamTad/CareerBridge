@@ -102,6 +102,9 @@ Extract structured information and return ONLY valid JSON:
   "certifications": ["certifications and licenses"],
   "summary": "2-sentence plain language summary",
   "targetRoles": ["3-6 Swedish AND English job title keywords matching their background, e.g. 'Frontendutvecklare', 'Frontend Developer', 'QA Testare', 'Undersköterska'"],
+  "recommendedProfessions": [{"profession": "", "sector": "", "reason": ""}],
+  "suitableWorkplaces": [{"name": "", "sector": "", "reason": ""}],
+  "upskillingSuggestions": [{"skill": "", "path": "", "reason": ""}],
   "seniorityLevel": "junior|mid|senior",
   "isLIAEligible": true/false,
   "sectors": ["it", "healthcare", "education", "trades", "office"]
@@ -169,6 +172,93 @@ export async function generateCoverLetter(
     languageHint: detectContentLanguage(cvText, jobDescription),
     system: `You are an expert cover letter writer. Create a tailored, honest, and compelling cover letter based only on the candidate's actual experience. ${langInstruction} Tone: ${tone}. Do NOT invent experience or skills not present in the CV.`,
     user: `Write a cover letter for:\nJob: ${jobTitle} at ${companyName}\n\nJob Description:\n${jobDescription}\n\nCandidate CV:\n${cvText}`,
+  })
+}
+
+export async function generateLiaPraktikLetter(
+  cvText: string,
+  role: string,
+  companyName: string,
+  opportunityDescription: string,
+  language: 'en' | 'sv' = 'sv'
+): Promise<string> {
+  const languageInstruction = language === 'sv'
+    ? 'Write the letter in Swedish.'
+    : 'Write the letter in English.'
+
+  return complete({
+    maxTokens: 1024,
+    task: 'lia-praktik-letter',
+    languageHint: detectContentLanguage(cvText, opportunityDescription),
+    system: `You write honest, concise applications for Swedish LIA, praktik, internship, and trainee opportunities. ${languageInstruction}
+Use only facts from the CV. Explain the candidate's education, relevant skills, learning goals, and how the placement can create value for the workplace. Do not invent experience, dates, certificates, or school requirements.`,
+    user: `Write a LIA/praktik application letter for:\nOpportunity: ${role} at ${companyName}\n\nDescription:\n${opportunityDescription}\n\nCandidate CV:\n${cvText}`,
+  })
+}
+
+export async function generateEmailApplication(
+  cvText: string,
+  role: string,
+  companyName: string,
+  opportunityDescription: string,
+  language: 'en' | 'sv' = 'sv'
+): Promise<string> {
+  const languageInstruction = language === 'sv'
+    ? 'Write the email in Swedish.'
+    : 'Write the email in English.'
+
+  return complete({
+    maxTokens: 384,
+    task: 'email-application',
+    languageHint: detectContentLanguage(cvText, opportunityDescription),
+    system: `Write a short, ready-to-edit application email. ${languageInstruction}
+Use only facts from the CV. Include a clear subject line, a compact message, and a professional closing. Keep the message under 180 words.`,
+    user: `Write an application email for:\nRole: ${role} at ${companyName}\n\nDescription:\n${opportunityDescription}\n\nCandidate CV:\n${cvText}`,
+  })
+}
+
+export async function recommendProfessionsWithAI(cvText: string): Promise<string> {
+  return complete({
+    maxTokens: 1024,
+    task: 'profession-recommendation',
+    languageHint: detectContentLanguage(cvText),
+    system: `You recommend suitable professions and Swedish workplaces from a candidate CV.
+Cover public sector, private employers, LIA, praktik, internships, and trainee paths. Return ONLY JSON:
+{
+  "professions": [{"profession": "", "sector": "", "reason": "", "searchTerms": []}],
+  "workplaces": [{"name": "", "sector": "", "reason": ""}]
+}
+Keep recommendations grounded in the CV. For care, LSS, äldreomsorg, or undersköterska backgrounds, prioritize nearby care professions before unrelated sectors.`,
+    user: `Recommend suitable Swedish professions and workplaces for this CV:\n\n${cvText}`,
+  })
+}
+
+export async function generateUpskillingSuggestions(cvText: string, targetRole: string): Promise<string> {
+  return complete({
+    maxTokens: 1024,
+    task: 'upskilling',
+    languageHint: detectContentLanguage(cvText, targetRole),
+    system: `You are a Swedish career coach. Suggest practical missing skills, courses, certificates, and upskilling paths for the requested profession.
+Return ONLY JSON:
+{
+  "missingSkills": [],
+  "courses": [],
+  "certificates": [],
+  "nextSteps": []
+}
+Do not claim that a certificate is legally required unless that is explicit and accurate.`,
+    user: `Target profession: ${targetRole}\n\nCandidate CV:\n${cvText}`,
+  })
+}
+
+export async function improveSwedishText(text: string): Promise<string> {
+  return complete({
+    maxTokens: 1536,
+    task: 'swedish-language-improvement',
+    languageHint: 'sv',
+    system: `Improve the Swedish language in the supplied career document.
+Preserve every factual claim. Keep the tone natural, professional, and concise. Do not add experience, education, certificates, dates, or metrics. Return only the revised text.`,
+    user: text,
   })
 }
 

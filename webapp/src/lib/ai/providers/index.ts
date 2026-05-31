@@ -24,14 +24,14 @@ export const DEFAULT_PROVIDER_PRIORITY: AIProvider[] = [
 ]
 
 export const SWEDISH_PROVIDER_PRIORITY: AIProvider[] = [
+  'aisweden',
+  'huggingface',
   'gemini',
   'openai',
   'deepseek',
   'groq',
   'openrouter',
   'anthropic',
-  'huggingface',
-  'aisweden',
   'ollama',
 ]
 

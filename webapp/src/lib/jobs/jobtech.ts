@@ -1,22 +1,8 @@
-export interface ExternalJob {
-  externalId: string
-  sourceAts: string
-  title: string
-  description: string
-  companyName: string
-  companyLogoUrl?: string | null
-  sourceUrl?: string | null
-  location?: string | null
-  city?: string | null
-  country?: string | null
-  jobType?: string | null
-  salary?: string | null
-  isRemote?: boolean
-  isHybrid?: boolean
-  isLia?: boolean
-  postedAt?: Date | null
-  closingAt?: Date | null
-}
+import { getOptionalEnv } from '@/lib/server/env'
+import { fetchJsonWithRetry, isSourceEnabled } from './sources/source-utils'
+import type { JobListing } from './types'
+
+export type ExternalJob = JobListing
 
 interface JobTechHit {
   id: string
@@ -62,6 +48,7 @@ function buildQuery(term: string, location?: string): string {
 }
 
 export async function searchJobTech(term: string, location = '', limit = 25): Promise<ExternalJob[]> {
+  if (!isSourceEnabled('ENABLE_ARBETSFORMEDLINGEN')) return []
   const q = buildQuery(term, location)
   if (!q) return []
 
@@ -71,16 +58,8 @@ export async function searchJobTech(term: string, location = '', limit = 25): Pr
     offset: '0',
   })
 
-  const response = await fetch(`https://jobsearch.api.jobtechdev.se/search?${params}`, {
-    headers: { accept: 'application/json' },
-    signal: AbortSignal.timeout(10000),
-  })
-
-  if (!response.ok) {
-    throw new Error(`JobTech search failed with status ${response.status}`)
-  }
-
-  const data = await response.json() as JobTechResponse
+  const baseUrl = (getOptionalEnv('ARBETSFORMEDLINGEN_JOBSEARCH_BASE_URL') ?? 'https://jobsearch.api.jobtechdev.se').replace(/\/+$/, '')
+  const data = await fetchJsonWithRetry<JobTechResponse>(`${baseUrl}/search?${params}`)
   const jobs = data.hits ?? []
 
   return jobs

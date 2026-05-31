@@ -162,16 +162,8 @@ export default function AIProvidersSettingsPage() {
 
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-xs font-medium uppercase text-slate-400">Konfiguration</dt>
-                <dd className="mt-1 font-medium text-slate-700">{provider.configured ? 'Konfigurerad' : 'Saknas'}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase text-slate-400">Model</dt>
-                <dd className="mt-1 break-words font-medium text-slate-700">{provider.model || 'Default'}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase text-slate-400">Last checked</dt>
-                <dd className="mt-1 font-medium text-slate-700">{formatDate(provider.checkedAt)}</dd>
+                <dt className="text-xs font-medium uppercase text-slate-400">API-nyckel</dt>
+                <dd className="mt-1 font-medium text-slate-700">{provider.configured ? 'Finns' : 'Saknas'}</dd>
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase text-slate-400">Svarstid</dt>
@@ -182,8 +174,22 @@ export default function AIProvidersSettingsPage() {
                 <dd className="mt-1 font-medium text-slate-700">{formatDate(provider.lastSuccessAt)}</dd>
               </div>
               <div>
-                <dt className="text-xs font-medium uppercase text-slate-400">Poäng</dt>
-                <dd className="mt-1 font-medium text-slate-700">{provider.score}/100</dd>
+                <dt className="text-xs font-medium uppercase text-slate-400">Senaste fel</dt>
+                <dd className="mt-1 font-medium text-slate-700">{formatDate(provider.lastErrorAt)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-slate-400">Kvotastatus</dt>
+                <dd className="mt-1 font-medium text-slate-700">
+                  {provider.disabledUntil
+                    ? `Pausad till ${formatDate(provider.disabledUntil)}`
+                    : provider.lastErrorCode === 'quota_exceeded'
+                      ? 'Kvot förbrukad (återskapad)'
+                      : 'OK'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase text-slate-400">Model</dt>
+                <dd className="mt-1 break-words font-medium text-slate-700">{provider.model || 'Default'}</dd>
               </div>
             </dl>
 

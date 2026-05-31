@@ -42,12 +42,14 @@ export async function GET(request: NextRequest) {
 
 import { analyzeAndSaveJobMatch } from '@/lib/ai/aiMatchingService'
 import { generateJobSearchQueries, getCvText, getFriendlyAIError } from '@/lib/ai/service'
-import { searchJobTech, uniqueExternalJobs, type ExternalJob } from '@/lib/jobs/jobtech'
+import type { ExternalJob } from '@/lib/jobs/jobtech'
 import { expandJobSearchLocations, locationLabelForSearch } from '@/lib/jobs/locations'
 import { persistExternalJobs } from '@/lib/jobs/persist'
 import { verifyActiveJobIds } from '@/lib/jobs/liveness'
 import { hasReachedAiLimit } from '@/lib/subscription'
-import { generateJobSearchUrls } from '@/lib/jobs/job-sources'
+import { hasCareProfile, recommendLocalProfessions } from '@/lib/jobs/profession-taxonomy'
+import { aggregateSwedishJobs } from '@/lib/jobs/sources'
+import type { JobSource, JobSourceDiagnostic, ProfessionRecommendation } from '@/lib/jobs/types'
 
 const CACHE_MINUTES = 20
 const MAX_IMPORTED_JOBS = 60
@@ -239,18 +241,42 @@ export async function POST(request: NextRequest) {
 
   let demoMode = false
   let foundJobs: ExternalJob[] = []
+  let additionalSources: JobSource[] = []
+  let sourceStatuses: JobSourceDiagnostic[] = []
   const searchLocations = expandJobSearchLocations(location)
   const expandedLocationSearch = searchLocations.length > 1
-  const sourceCount = searchTerms.length * searchLocations.length
+  const taxonomyText = `${cvText} ${JSON.stringify(cv.parsedData ?? {})}`
+  const careProfile = hasCareProfile(taxonomyText)
+  const localProfessionRecommendations = recommendLocalProfessions(taxonomyText)
+  const professionTerms = localProfessionRecommendations
+    .slice(0, careProfile ? 10 : 3)
+    .map((profession) => profession.profession)
+  const professionSearchTerms = uniqueTerms(
+    [query, ...professionTerms, ...searchTerms],
+    careProfile ? 10 : MAX_SEARCH_TERMS
+  )
+  let sourceCount = professionSearchTerms.length * searchLocations.length
+
+  const cvParsed = cv.parsedData && typeof cv.parsedData === 'object' && !Array.isArray(cv.parsedData)
+    ? cv.parsedData as Record<string, unknown>
+    : {}
+  const cvSectors = Array.isArray(cvParsed.sectors)
+    ? (cvParsed.sectors as string[])
+    : localProfessionRecommendations.map((profession) => profession.category)
 
   try {
     await updateTask(searchTask.id, { progress: 46, currentStep: 'Searching job sources', sourcesScanned: sourceCount })
-    const results = await Promise.allSettled(
-      searchTerms.flatMap((term) =>
-        searchLocations.map((place) => searchJobTech(term, place, expandedLocationSearch ? 6 : 12))
-      )
+    const searchResult = await aggregateSwedishJobs(
+      professionSearchTerms,
+      searchLocations,
+      expandedLocationSearch ? 6 : 12,
+      cvSectors,
+      isLIAProfile
     )
-    foundJobs = uniqueExternalJobs(results.flatMap((result) => result.status === 'fulfilled' ? result.value : []))
+    foundJobs = searchResult.jobs
+    additionalSources = searchResult.sourceLinks
+    sourceStatuses = searchResult.diagnostics
+    sourceCount = searchResult.searchesRun
   } catch {
     foundJobs = []
   }
@@ -326,28 +352,21 @@ export async function POST(request: NextRequest) {
   const recommendedIds = new Set(recommendedMatches.map((match) => match.jobListingId))
   jobIds = jobIds.filter((jobId) => recommendedIds.has(jobId))
 
-  // Generate search URLs for additional job boards beyond Platsbanken
-  const cvParsed = cv.parsedData && typeof cv.parsedData === 'object' && !Array.isArray(cv.parsedData)
-    ? cv.parsedData as Record<string, unknown>
-    : {}
-  const cvSectors = Array.isArray(cvParsed.sectors)
-    ? (cvParsed.sectors as string[])
-    : []
-  const additionalSources = generateJobSearchUrls(searchTerms.slice(0, 4), location, cvSectors)
-
   const response = {
     newJobs: newCount,
     totalFound: foundJobs.length,
     imported: jobIds.length,
     expiredSkipped: persistedJobIds.length - jobIds.length,
     autoMatched: matchedCount,
-    searchedFor: searchTerms,
+    searchedFor: professionSearchTerms,
     location: locationLabelForSearch(location),
     searchedLocations: searchLocations.filter(Boolean),
     candidateSummary: searchData.summary,
     source: demoMode ? 'Demo mode' : 'JobTech/Platsbanken',
-    sources: demoMode ? ['demo'] : ['jobtech-platsbanken'],
+    sources: demoMode ? ['demo'] : ['arbetsformedlingen-jobtech', 'jobtech-taxonomy', 'kommun', 'region', 'company-career-pages', 'lia-praktik'],
     additionalSources,
+    sourceStatuses,
+    professionRecommendations: localProfessionRecommendations satisfies ProfessionRecommendation[],
     liaMode: isLIAProfile,
     demoMode,
     usedCvCache,
@@ -357,11 +376,8 @@ export async function POST(request: NextRequest) {
     jobIds,
   }
 
-  // Save results to DB (additionalSources is excluded — not needed in cache)
-  const dbResults = {
-    ...response,
-    additionalSources: undefined,
-  } as unknown as Prisma.InputJsonObject
+  // Preserve source links so cached searches keep the same municipality, region, and employer shortcuts.
+  const dbResults = response as unknown as Prisma.InputJsonObject
 
   await updateTask(searchTask.id, {
     status: 'COMPLETED',

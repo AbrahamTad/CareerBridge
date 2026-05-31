@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { requireAuth, isAuthResponse } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { searchJobTech, uniqueExternalJobs } from '@/lib/jobs/jobtech'
 import { expandJobSearchLocations, locationLabelForSearch } from '@/lib/jobs/locations'
 import { persistExternalJobs } from '@/lib/jobs/persist'
+import { aggregateSwedishJobs } from '@/lib/jobs/sources'
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth()
@@ -42,12 +42,14 @@ export async function POST(request: NextRequest) {
   try {
     const searchLocations = expandJobSearchLocations(location)
     const expandedLocationSearch = searchLocations.length > 1
-    const results = await Promise.allSettled(
-      searchTerms.slice(0, 4).flatMap((term) =>
-        searchLocations.map((place) => searchJobTech(term, place, expandedLocationSearch ? 8 : 25))
-      )
+    const searchResult = await aggregateSwedishJobs(
+      searchTerms.slice(0, 4),
+      searchLocations,
+      expandedLocationSearch ? 8 : 25,
+      [],
+      liaOnly
     )
-    const foundJobs = uniqueExternalJobs(results.flatMap((result) => result.status === 'fulfilled' ? result.value : []))
+    const foundJobs = searchResult.jobs
       .filter((job) => !liaOnly || job.isLia || /lia|praktik|trainee|internship|larling|apprentice/i.test(`${job.title} ${job.description} ${job.jobType ?? ''}`))
     const jobs = foundJobs.slice(0, 50)
     const { newCount } = await persistExternalJobs(jobs)
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
         status: 'COMPLETED',
         progress: 100,
         currentStep: 'Completed',
-        sourcesScanned: searchTerms.slice(0, 4).length * searchLocations.length,
+        sourcesScanned: searchResult.searchesRun,
         jobsFound: jobs.length,
         companiesFound: new Set(jobs.map((job) => job.companyName.toLowerCase())).size,
         completedAt: new Date(),
@@ -67,6 +69,7 @@ export async function POST(request: NextRequest) {
           total: foundJobs.length,
           imported: jobs.length,
           source: 'jobtech',
+          sourceStatuses: searchResult.diagnostics.map((source) => ({ ...source })),
           location: locationLabelForSearch(location),
           searchedLocations: searchLocations.filter(Boolean),
         },
@@ -80,6 +83,8 @@ export async function POST(request: NextRequest) {
       taskId: searchTask.id,
       location: locationLabelForSearch(location),
       searchedLocations: searchLocations.filter(Boolean),
+      sources: searchResult.sourceLinks,
+      sourceStatuses: searchResult.diagnostics,
     })
   } catch (err: unknown) {
     await prisma.searchTask.update({

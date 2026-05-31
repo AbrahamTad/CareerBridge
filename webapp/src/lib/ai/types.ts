@@ -30,7 +30,18 @@ export interface CompletionRequest {
   user: string
   maxTokens: number
   languageHint?: ContentLanguage
-  task?: 'cv-analysis' | 'job-match' | 'cover-letter' | 'cv-adapt' | 'job-search' | 'company-discovery'
+  task?:
+    | 'cv-analysis'
+    | 'job-match'
+    | 'cover-letter'
+    | 'lia-praktik-letter'
+    | 'email-application'
+    | 'cv-adapt'
+    | 'job-search'
+    | 'profession-recommendation'
+    | 'swedish-language-improvement'
+    | 'upskilling'
+    | 'company-discovery'
 }
 
 export interface ProviderRequest extends CompletionRequest {

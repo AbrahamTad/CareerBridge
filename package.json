@@ -19,6 +19,7 @@
     "gemini:eval": "node gemini-eval.mjs",
     "check:env": "npm --prefix webapp run check:env",
     "check:apis": "npm --prefix webapp run check:apis",
+    "check:integrations": "npm --prefix webapp run check:integrations",
     "check:db": "npm --prefix webapp run check:db",
     "test:ai": "npm --prefix webapp run test:ai",
     "lint": "npm --prefix webapp run lint",

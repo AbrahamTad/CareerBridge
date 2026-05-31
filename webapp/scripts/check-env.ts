@@ -60,3 +60,14 @@ if (validation.missingOptionalProviders.length > 0) {
   console.log('')
   console.log(`Optional AI providers not configured: ${validation.missingOptionalProviders.map((provider) => provider.provider).join(', ')}`)
 }
+
+console.log('')
+console.log('Swedish job sources:')
+for (const source of validation.jobSources) {
+  console.log(`- ${source.source}: ${source.enabled ? 'enabled' : 'disabled'} (${source.enabledKey})`)
+  if (source.baseUrl) console.log(`  base URL: ${source.baseUrl}`)
+  if (!source.validBaseUrl) {
+    console.log('  error: base URL must use http:// or https://')
+    process.exitCode = 1
+  }
+}

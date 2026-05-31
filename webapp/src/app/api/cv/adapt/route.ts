@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
         id: saved.id,
         fallback: true,
         degraded: true,
-        message: 'AI providers are unavailable. A local editable CV draft was created from your uploaded CV.',
+        message: 'AI services are temporarily limited. CareerBridge generated a draft using local intelligence and your uploaded CV.',
       })
     }
 

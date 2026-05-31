@@ -14,8 +14,15 @@ const PROTECTED_PATHS = [
 
 const AUTH_PATHS = ['/login', '/register', '/forgot-password']
 const ADMIN_PATHS = ['/admin']
+const PUBLIC_FILE = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt)$/i
 
 export async function middleware(request: NextRequest) {
+  const path = request.nextUrl.pathname
+
+  if (path.startsWith('/_next/') || path === '/favicon.ico' || PUBLIC_FILE.test(path)) {
+    return NextResponse.next()
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -41,7 +48,6 @@ export async function middleware(request: NextRequest) {
   )
 
   const { data: { user } } = await supabase.auth.getUser()
-  const path = request.nextUrl.pathname
 
   if (PROTECTED_PATHS.some((p) => path.startsWith(p)) && !user) {
     const redirectUrl = new URL('/login', request.url)
@@ -62,7 +68,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Keep auth callback/signout and webhooks out of middleware so redirects stay fast.
-    '/((?!_next/static|_next/image|favicon.ico|api/auth/callback|api/auth/signout|api/stripe/webhook|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Keep Next internals, static assets, auth callback/signout, and webhooks out of middleware.
+    '/((?!_next/|favicon.ico|api/auth/callback|api/auth/signout|api/stripe/webhook|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt)$).*)',
   ],
 }

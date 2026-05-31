@@ -1,6 +1,15 @@
 import type { User, UserProfile, CV, JobListing, Company, JobMatch, Application, GeneratedCV, CoverLetter, Subscription } from '@prisma/client'
 
 export type { User, UserProfile, CV, JobListing, Company, JobMatch, Application, GeneratedCV, CoverLetter, Subscription }
+export type { AIProvider } from '@/lib/ai/types'
+export type {
+  CVProfile as SwedishCVProfile,
+  JobListing as SwedishJobListing,
+  JobSource,
+  MatchResult,
+  ProfessionRecommendation,
+  ProfessionTaxonomyItem,
+} from '@/lib/jobs/types'
 
 export type UserWithProfile = User & {
   profile: UserProfile | null

@@ -1,8 +1,9 @@
 import { getAIProviderKey, getOptionalEnv } from '@/lib/server/env'
 import { AIProviderError, type AIProviderClient, type ProviderRequest } from '../types'
-import { normalizeRequestError, parseProviderError, providerErrorCodeFromStatus } from './utils'
+import { normalizeBaseUrl, normalizeRequestError, parseProviderError, providerErrorCodeFromStatus } from './utils'
 
 const DEFAULT_MODEL = 'HuggingFaceH4/zephyr-7b-beta'
+const DEFAULT_BASE_URL = 'https://api-inference.huggingface.co'
 
 function buildPrompt(system: string, user: string) {
   return `${system.trim()}\n\nUser request:\n${user.trim()}\n\nAnswer:`
@@ -22,12 +23,18 @@ function extractText(data: unknown): string | null {
   return null
 }
 
+function endpointForModel(model: string) {
+  const baseUrl = normalizeBaseUrl(getOptionalEnv('HUGGINGFACE_BASE_URL') ?? DEFAULT_BASE_URL)
+  return baseUrl.endsWith('/models') ? `${baseUrl}/${model}` : `${baseUrl}/models/${model}`
+}
+
 export const huggingFaceProvider: AIProviderClient = {
   name: 'huggingface',
   envKey: 'HUGGINGFACE_API_KEY',
   modelEnvKey: 'HUGGINGFACE_MODEL',
   defaultModel: DEFAULT_MODEL,
-  defaultBaseUrl: 'https://api-inference.huggingface.co/models',
+  baseUrlEnvKey: 'HUGGINGFACE_BASE_URL',
+  defaultBaseUrl: DEFAULT_BASE_URL,
   requiresApiKey: true,
   priority: 7,
   supportsSwedish: true,
@@ -43,7 +50,7 @@ export const huggingFaceProvider: AIProviderClient = {
     const model = getOptionalEnv('HUGGINGFACE_MODEL') ?? DEFAULT_MODEL
     let response: Response
     try {
-      response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+      response = await fetch(endpointForModel(model), {
         method: 'POST',
         signal,
         headers: {

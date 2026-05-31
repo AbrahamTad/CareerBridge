@@ -3,7 +3,8 @@ import type { NextRequest } from 'next/server'
 import { requireAuth, isAuthResponse } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { discoverCompanies, getFriendlyAIError } from '@/lib/ai/service'
-import { searchJobTech, uniqueExternalJobs, type ExternalJob } from '@/lib/jobs/jobtech'
+import { uniqueExternalJobs, type ExternalJob } from '@/lib/jobs/jobtech'
+import { searchArbetsformedlingen } from '@/lib/jobs/sources/arbetsformedlingen'
 import { isPastDeadline, pageLooksExpired } from '@/lib/jobs/liveness'
 import { hasReachedAiLimit } from '@/lib/subscription'
 
@@ -91,7 +92,7 @@ async function findCompaniesFromJobTech(targetRole: string, location: string, li
     : [targetRole]
 
   const results = await Promise.allSettled(
-    terms.map((term) => searchJobTech(term, isWholeSweden(location) ? '' : location, 20))
+    terms.map((term) => searchArbetsformedlingen(term, isWholeSweden(location) ? '' : location, 20))
   )
   const jobs = uniqueExternalJobs(results.flatMap((result) => result.status === 'fulfilled' ? result.value : []))
     .filter((job) => !isPastDeadline(job.closingAt ?? null))

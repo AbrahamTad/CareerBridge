@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { requireAuth, isAuthResponse } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { analyzeCV, getCvText, getFriendlyAIError } from '@/lib/ai/service'
+import { cvProfileToParsedData, parseCVProfile } from '@/lib/ai/cv-parser'
 import { hasReachedAiLimit } from '@/lib/subscription'
 
 const KNOWN_SKILLS = [
@@ -86,9 +87,11 @@ function localAnalyzeCV(rawText: string): Prisma.InputJsonObject {
     /\b(french|franska)\b/i.test(rawText) ? 'French' : '',
     /\b(german|tyska)\b/i.test(rawText) ? 'German' : '',
   ].filter(Boolean))
+  const localProfile = parseCVProfile(rawText)
 
   return {
-    skills,
+    ...cvProfileToParsedData(localProfile),
+    skills: unique([...localProfile.skills, ...skills]),
     tools: skills.filter((skill) => ['Git', 'GitHub', 'Docker', 'Figma', 'Excel', 'Power BI'].includes(skill)),
     languages: skills.filter((skill) => ['JavaScript', 'TypeScript', 'Python', 'Java', 'C#', 'SQL'].includes(skill)),
     spokenLanguages,
@@ -96,7 +99,7 @@ function localAnalyzeCV(rawText: string): Prisma.InputJsonObject {
     experience: [],
     projects: [],
     summary: normalized.slice(0, 280),
-    targetRoles,
+    targetRoles: localProfile.targetRoles.length ? localProfile.targetRoles : targetRoles,
     seniorityLevel: /\b(senior|lead|principal)\b/i.test(rawText) ? 'senior' : /\b(junior|student|lia|intern)\b/i.test(rawText) ? 'junior' : 'mid',
     source: 'local-fallback',
   }

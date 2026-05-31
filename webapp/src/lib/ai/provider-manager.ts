@@ -1,10 +1,11 @@
 import { getOptionalEnv, logAIEnvironmentDiagnostics } from '@/lib/server/env'
 import { AIProviderError, type AIErrorCode, type AIHealthSummary, type AIProvider, type AIProviderCheckStatus, type CompletionRequest, type ProviderHealth } from './types'
 import { getFallbackProvider, getProviderPriority } from './provider-router'
-import { isProviderConfigured, providerClients } from './providers/index'
+import { isProviderConfigured, providerClients, providerLabel } from './providers/index'
 import { sanitizeProviderMessage } from './providers/utils'
 
-const DEFAULT_TIMEOUT_MS = 20_000
+const DEFAULT_TIMEOUT_MS = 10_000
+const TOTAL_TIMEOUT_MS = 20_000
 const DEFAULT_LOCAL_TIMEOUT_MS = 4_000
 const DEFAULT_HEALTH_TIMEOUT_MS = 10_000
 const MAX_ATTEMPTS_PER_PROVIDER = 2
@@ -18,6 +19,7 @@ const providerState = new Map<AIProvider, {
   lastResponseTimeMs?: number
   lastCheckStatus?: AIProviderCheckStatus
   disabledUntil?: string
+  failureCount?: number
 }>()
 
 function timeoutMs() {
@@ -86,19 +88,26 @@ function logProviderAttempt(
   attempt?: number
 ) {
   const providerError = error instanceof AIProviderError ? error : undefined
-  const payload = {
-    provider,
-    status,
-    attempt,
-    code: providerError?.code,
-    httpStatus: providerError?.status,
-    message: providerError?.message ? sanitizeProviderMessage(providerError.message) : undefined,
-    responseTimeMs: Date.now() - startedAt,
+  const label = providerLabel(provider)
+
+  if (status === 'success') {
+    console.info(`[AI] ${label} success (${Date.now() - startedAt}ms)`)
+    return
   }
 
-  if (status === 'success') console.info('AI provider request succeeded', payload)
-  else if (status === 'skipped') console.warn('AI provider skipped', payload)
-  else console.warn('AI provider request failed', payload)
+  const reason = providerError?.code === 'quota_exceeded' || providerError?.status === 429 ? 'quota exceeded'
+    : providerError?.code === 'timeout' ? 'timeout'
+    : providerError?.code === 'server_offline' ? 'offline'
+    : providerError?.code === 'invalid_api_key' ? 'invalid key'
+    : providerError?.code === 'missing_api_key' || providerError?.code === 'missing_configuration' ? 'no key'
+    : providerError?.code === 'invalid_response' ? 'invalid response'
+    : sanitizeProviderMessage(providerError?.message ?? 'failed').slice(0, 60)
+
+  if (status === 'skipped') {
+    if (reason !== 'no key' && reason !== 'disabled') console.warn(`[AI] ${label} skipped (${reason})`)
+  } else {
+    console.warn(`[AI] ${label} failed (${reason})${attempt && attempt > 1 ? `, attempt ${attempt}` : ''}`)
+  }
 }
 
 function recordProviderAttempt(
@@ -118,6 +127,7 @@ function recordProviderAttempt(
       lastResponseTimeMs: responseTimeMs,
       lastCheckStatus: 'working',
       disabledUntil: undefined,
+      failureCount: 0,
     })
     return
   }
@@ -138,6 +148,7 @@ function recordProviderAttempt(
     lastResponseTimeMs: responseTimeMs,
     lastCheckStatus: checkStatusFromError(error, providerClients[provider].local === true),
     disabledUntil: disabledMs > 0 ? new Date(Date.now() + disabledMs).toISOString() : current.disabledUntil,
+    failureCount: (current.failureCount ?? 0) + 1,
   })
 }
 
@@ -163,14 +174,42 @@ async function withTimeout<T>(callback: (signal: AbortSignal) => Promise<T>, ms:
   }
 }
 
+async function isLocalProviderReachable(provider: AIProvider): Promise<boolean> {
+  const client = providerClients[provider]
+  if (!client.local) return true
+
+  // Only pre-ping if this provider has never succeeded — avoids overhead on healthy servers
+  const state = providerState.get(provider)
+  if (state?.lastSuccessAt) return true
+
+  const envUrl = client.baseUrlEnvKey ? getOptionalEnv(client.baseUrlEnvKey) : undefined
+  const url = (envUrl ?? client.defaultBaseUrl ?? '').replace(/\/$/, '')
+  if (!url) return false
+
+  try {
+    const res = await withTimeout((signal) => fetch(`${url}/api/tags`, { method: 'GET', signal }), 3_000)
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 export async function completeWithProviderFallback(request: CompletionRequest): Promise<string> {
   logAIEnvironmentDiagnostics()
   const providers = getProviderPriority(request)
+  const totalDeadlineMs = Date.now() + TOTAL_TIMEOUT_MS
   let lastError: unknown
   let skipped = 0
   let failed = 0
 
-  for (const provider of providers) {
+  for (let i = 0; i < providers.length; i++) {
+    const provider = providers[i]!
+
+    if (Date.now() >= totalDeadlineMs) {
+      console.warn('[AI] Total timeout reached, activating local fallback')
+      break
+    }
+
     const client = providerClients[provider]
     const disabledUntil = getDisabledUntil(provider)
     if (disabledUntil) {
@@ -190,13 +229,24 @@ export async function completeWithProviderFallback(request: CompletionRequest): 
       continue
     }
 
+    if (client.local && !(await isLocalProviderReachable(provider))) {
+      const error = new AIProviderError('server_offline', provider, `${providerLabel(provider)} is offline.`)
+      lastError = error
+      skipped += 1
+      recordProviderAttempt(provider, 'skipped', 0, error)
+      logProviderAttempt(provider, 'skipped', Date.now(), error)
+      continue
+    }
+
+    const remainingMs = totalDeadlineMs - Date.now()
+    const providerMs = Math.min(providerTimeoutMs(provider), Math.max(1_000, remainingMs))
     const maxAttempts = maxAttemptsForProvider(provider)
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const startedAt = Date.now()
       try {
         const content = await withTimeout(
           (signal) => client.complete({ ...request, signal }),
-          providerTimeoutMs(provider)
+          providerMs
         )
         const trimmedContent = content.trim()
         if (!trimmedContent) {
@@ -205,12 +255,6 @@ export async function completeWithProviderFallback(request: CompletionRequest): 
         const responseTimeMs = Date.now() - startedAt
         recordProviderAttempt(provider, 'success', responseTimeMs)
         logProviderAttempt(provider, 'success', startedAt, undefined, attempt)
-        console.info('AI provider fallback selected provider', {
-          provider,
-          task: request.task,
-          skippedProviders: skipped,
-          failedAttempts: failed,
-        })
         return trimmedContent
       } catch (error) {
         lastError = error
@@ -219,19 +263,17 @@ export async function completeWithProviderFallback(request: CompletionRequest): 
         logProviderAttempt(provider, 'failed', startedAt, error, attempt)
 
         if (attempt < maxAttempts && shouldRetryProvider(error)) continue
-        if (shouldTryNextProvider(error)) break
+        if (shouldTryNextProvider(error)) {
+          const next = providers.slice(i + 1).find((p) => isProviderConfigured(p) && !getDisabledUntil(p))
+          if (next) console.warn(`[AI] Switching to ${providerLabel(next)}`)
+          break
+        }
         throw error
       }
     }
   }
 
-  console.error('All AI providers failed or were skipped', {
-    task: request.task,
-    providers,
-    skippedProviders: skipped,
-    failedAttempts: failed,
-    lastError: sanitizeProviderMessage(lastError instanceof Error ? lastError.message : String(lastError ?? 'none')),
-  })
+  console.warn(`[AI] All providers unavailable (${skipped} skipped, ${failed} failed) → activating local fallback`)
 
   throw new AIProviderError(
     'all_unavailable',

@@ -3,6 +3,9 @@ import { AIProviderError, type AIProviderClient, type ProviderRequest } from '..
 import { normalizeRequestError, parseProviderError, providerErrorCodeFromStatus } from './utils'
 
 const DEFAULT_MODEL = 'AI-Sweden-Models/gpt-sw3-6.7b-v2-instruct'
+const MODEL_ALIASES: Record<string, string> = {
+  'gpt-sw3': DEFAULT_MODEL,
+}
 
 function buildPrompt(system: string, user: string) {
   return `${system.trim()}\n\nUser request:\n${user.trim()}\n\nAnswer:`
@@ -19,6 +22,22 @@ function extractGeneratedText(data: unknown): string | null {
     if (typeof record.generatedText === 'string') return record.generatedText
   }
   return null
+}
+
+function resolveModel(model: string) {
+  return MODEL_ALIASES[model.toLowerCase()] ?? model
+}
+
+function endpointForModel(model: string) {
+  const configured = getOptionalEnv('AI_SWEDEN_BASE_URL') ?? getOptionalEnv('GPT_SW3_ENDPOINT')
+  if (!configured) return `https://api-inference.huggingface.co/models/${model}`
+
+  const endpoint = configured.replace(/\/+$/, '')
+  if (endpoint.includes('/models/')) return endpoint
+  if (endpoint.endsWith('/models') || endpoint === 'https://api-inference.huggingface.co') {
+    return `${endpoint}${endpoint.endsWith('/models') ? '' : '/models'}/${model}`
+  }
+  return endpoint
 }
 
 export const aiSwedenProvider: AIProviderClient = {
@@ -40,11 +59,8 @@ export const aiSwedenProvider: AIProviderClient = {
       throw new AIProviderError('missing_api_key', provider, 'Missing AI_SWEDEN_API_KEY.')
     }
 
-    const model = getOptionalEnv('AI_SWEDEN_MODEL') ?? getOptionalEnv('GPT_SW3_MODEL') ?? DEFAULT_MODEL
-    const endpoint =
-      getOptionalEnv('AI_SWEDEN_BASE_URL') ??
-      getOptionalEnv('GPT_SW3_ENDPOINT') ??
-      `https://api-inference.huggingface.co/models/${model}`
+    const model = resolveModel(getOptionalEnv('AI_SWEDEN_MODEL') ?? getOptionalEnv('GPT_SW3_MODEL') ?? DEFAULT_MODEL)
+    const endpoint = endpointForModel(model)
 
     let response: Response
     try {

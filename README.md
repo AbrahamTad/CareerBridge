@@ -183,9 +183,26 @@ AI_PROVIDER=openai
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini
 
-# Optional Swedish/Nordic model via Hugging Face
-HUGGINGFACE_API_TOKEN=hf_...
-GPT_SW3_MODEL=AI-Sweden-Models/gpt-sw3-6.7b-v2-instruct
+# Optional AI Sweden / GPT-SW3 provider
+AI_SWEDEN_API_KEY=hf_...
+AI_SWEDEN_BASE_URL=
+AI_SWEDEN_MODEL=gpt-sw3
+
+# Optional Hugging Face provider
+HUGGINGFACE_API_KEY=hf_...
+HUGGINGFACE_BASE_URL=https://api-inference.huggingface.co
+HUGGINGFACE_MODEL=
+
+# Swedish public APIs and career-page search catalogs
+ARBETSFORMEDLINGEN_JOBSEARCH_BASE_URL=https://jobsearch.api.jobtechdev.se
+JOBTECH_TAXONOMY_BASE_URL=https://taxonomy.api.jobtechdev.se
+ENABLE_ARBETSFORMEDLINGEN=true
+ENABLE_JOBTECH_TAXONOMY=true
+ENABLE_KOMMUN_JOBS=true
+ENABLE_REGION_JOBS=true
+ENABLE_COMPANY_CAREER_PAGES=true
+ENABLE_LIA_PRAKTIK_SEARCH=true
+
 # AI_PROVIDER=gpt-sw3
 ```
 
@@ -196,6 +213,16 @@ Useful API routes:
 - `POST /api/jobs/search` fetches JobTech/Platsbanken jobs and saves them.
 - `POST /api/jobs/smart-search` builds CV-driven search terms, imports jobs, and saves match results.
 - `POST /api/ai/match-jobs` matches the active CV to a saved job listing.
+
+CareerBridge imports active listings through Arbetsförmedlingen/JobTech and adds outbound searches for Offentliga Jobb, configured kommun and region career pages, private care employers, tech recruiters, Teamtailor pages, and LIA/praktik sources. The local fallback taxonomy contains 650 professions across 26 industries, while JobTech Taxonomy is available as the live Swedish taxonomy source.
+
+Run diagnostics from the repository root:
+
+```bash
+npm run check:env
+npm run check:integrations
+npm run type-check
+```
 
 If `AI_PROVIDER=gpt-sw3` and GPT-SW3 is unavailable, the app falls back to OpenAI when `OPENAI_API_KEY` is configured.
 

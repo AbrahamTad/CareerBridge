@@ -63,12 +63,15 @@ export const ollamaProvider: AIProviderClient = {
     return text
   },
   async healthCheck(signal?: AbortSignal) {
-    const result = await this.complete({
-      system: 'Reply with OK only.',
-      user: 'OK',
-      maxTokens: 8,
-      signal,
-    })
-    return result.trim().length > 0
+    const url = baseUrl()
+    if (!url) throw new AIProviderError('missing_configuration', 'ollama', 'Missing OLLAMA_BASE_URL.')
+    try {
+      const res = await fetch(`${url}/api/tags`, { method: 'GET', signal })
+      if (!res.ok) throw new AIProviderError('request_failed', 'ollama', `Ollama /api/tags returned ${res.status}.`, res.status)
+      return true
+    } catch (error) {
+      if (error instanceof AIProviderError) throw error
+      throw new AIProviderError('server_offline', 'ollama', `Ollama is not running at ${url}. Start Ollama or remove OLLAMA_BASE_URL.`)
+    }
   },
 }

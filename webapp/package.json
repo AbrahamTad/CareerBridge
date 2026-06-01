@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
     "check:env": "tsx scripts/check-env.ts",
+    "check:env-and-apis": "tsx scripts/check-env-and-apis.ts",
     "check:apis": "tsx scripts/check-apis.ts",
     "check:integrations": "tsx scripts/check-integrations.ts",
     "check:db": "tsx scripts/check-db.ts",

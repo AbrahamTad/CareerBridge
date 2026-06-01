@@ -3,5 +3,6 @@ data/
 logs/
 sessions/
 neural/
+tasks/store.json
 *.log
 *.tmp

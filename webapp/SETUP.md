@@ -1,7 +1,7 @@
 # CareerOps AI — SaaS Web App Setup
 
 ## Tech Stack
-- **Frontend:** Next.js 14 (App Router) + React + TypeScript
+- **Frontend:** Next.js 15 (App Router) + React + TypeScript
 - **UI:** Tailwind CSS (shadcn-compatible components, hand-written)
 - **Database:** PostgreSQL via **Supabase**
 - **ORM:** Prisma
@@ -58,12 +58,13 @@ DATABASE_URL=postgresql://postgres.xxxx:password@aws-0-eu-north-1.pooler.supabas
 DIRECT_URL=postgresql://postgres.xxxx:password@aws-0-eu-north-1.pooler.supabase.com:5432/postgres
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
-AI_SWEDEN_API_KEY=            # optional GPT-SW3 provider
+AI_SWEDEN_PROVIDER=huggingface # optional GPT-SW3 Hugging Face fallback
 AI_SWEDEN_BASE_URL=
-AI_SWEDEN_MODEL=gpt-sw3
+AI_SWEDEN_MODEL=AI-Sweden-Models/gpt-sw3-356m
 HUGGINGFACE_API_KEY=          # optional Hugging Face provider
-HUGGINGFACE_BASE_URL=https://api-inference.huggingface.co
-HUGGINGFACE_MODEL=
+HF_TOKEN=                     # standard Hugging Face token alias
+HUGGINGFACE_BASE_URL=https://router.huggingface.co/v1
+HUGGINGFACE_MODEL=openai/gpt-oss-120b:cerebras
 ARBETSFORMEDLINGEN_JOBSEARCH_BASE_URL=https://jobsearch.api.jobtechdev.se
 JOBTECH_TAXONOMY_BASE_URL=https://taxonomy.api.jobtechdev.se
 ENABLE_ARBETSFORMEDLINGEN=true
@@ -73,7 +74,6 @@ ENABLE_REGION_JOBS=true
 ENABLE_COMPANY_CAREER_PAGES=true
 ENABLE_LIA_PRAKTIK_SEARCH=true
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXTAUTH_SECRET=run: openssl rand -base64 32
 ```
 
 ---

@@ -51,15 +51,10 @@ OPENAI_API_KEY=your-real-key-here
 OPENAI_MODEL=gpt-4o-mini
 ```
 
-For this workspace, your local files already have Gemini and OpenAI configured in `webapp/.env.local`. Both keys are read correctly, but the latest health check reported provider quota exceeded. When quota is available again, rerun:
+After changing local keys, rerun diagnostics and restart the dev server so Next.js reloads env vars:
 
 ```bash
-npm run check:apis
-```
-
-Then restart the dev server so Next.js reloads env vars:
-
-```bash
+npm run check:env-and-apis
 npm run dev
 ```
 
@@ -75,8 +70,8 @@ Never commit `.env`, `.env.local`, or real API keys. The diagnostics scripts mas
 | Groq | `GROQ_API_KEY`, `GROQ_MODEL`, `GROQ_BASE_URL` | OpenAI-compatible and fast. Default base URL: `https://api.groq.com/openai/v1`. Console: https://console.groq.com/ |
 | OpenRouter | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_BASE_URL` | Routes to many models. Default base URL: `https://openrouter.ai/api/v1`. Keys: https://openrouter.ai/settings/keys |
 | Anthropic | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Default in code is `claude-3-5-haiku-latest` if no model is set. Keys: https://console.anthropic.com/settings/keys |
-| Hugging Face | `HUGGINGFACE_API_KEY`, `HUGGINGFACE_BASE_URL`, `HUGGINGFACE_MODEL` | Default base URL: `https://api-inference.huggingface.co`. `HUGGINGFACE_API_TOKEN` is still accepted as a legacy alias. Tokens: https://huggingface.co/settings/tokens |
-| AI Sweden | `AI_SWEDEN_API_KEY`, `AI_SWEDEN_MODEL`, `AI_SWEDEN_BASE_URL` | Uses an inference endpoint for GPT-SW3-compatible text generation. `AI_SWEDEN_MODEL=gpt-sw3` maps to the default GPT-SW3 instruct model. Legacy aliases `GPT_SW3_MODEL` and `GPT_SW3_ENDPOINT` still work. |
+| Hugging Face | `HUGGINGFACE_API_KEY` or `HF_TOKEN`, `HUGGINGFACE_BASE_URL`, `HUGGINGFACE_MODEL` | Uses the current OpenAI-compatible router at `https://router.huggingface.co/v1`. `HUGGINGFACE_API_TOKEN` remains a legacy alias. Tokens: https://huggingface.co/settings/tokens |
+| AI Sweden | `AI_SWEDEN_API_KEY`, `AI_SWEDEN_PROVIDER`, `AI_SWEDEN_MODEL`, `AI_SWEDEN_BASE_URL` | GPT-SW3 can use a dedicated text-generation endpoint. For Hugging Face fallback, set `AI_SWEDEN_PROVIDER=huggingface`, `AI_SWEDEN_MODEL=AI-Sweden-Models/gpt-sw3-356m`, and a Hugging Face token. Model availability still depends on the configured hosted endpoint. Legacy aliases `GPT_SW3_MODEL` and `GPT_SW3_ENDPOINT` remain supported. |
 | Ollama | `OLLAMA_BASE_URL`, `OLLAMA_MODEL` | Local provider. Default URL is `http://localhost:11434`, model `llama3.1`. |
 
 ## Health Checks
@@ -85,6 +80,7 @@ Run:
 
 ```bash
 npm run check:env
+npm run check:env-and-apis
 npm run check:apis
 npm run check:integrations
 npm run test:ai

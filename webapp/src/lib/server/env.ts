@@ -38,11 +38,13 @@ const AI_ENV_NAMES = new Set([
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_MODEL',
   'AI_SWEDEN_API_KEY',
+  'AI_SWEDEN_PROVIDER',
   'AI_SWEDEN_MODEL',
   'AI_SWEDEN_BASE_URL',
   'HUGGINGFACE_API_KEY',
   'HUGGINGFACE_BASE_URL',
   'AI_PROVIDER_TIMEOUT_MS',
+  'HF_TOKEN',
   'HUGGINGFACE_API_TOKEN',
   'HUGGINGFACE_MODEL',
   'GPT_SW3_MODEL',
@@ -93,8 +95,8 @@ export const OPTIONAL_AI_PROVIDER_ENV = [
   { provider: 'groq', key: 'GROQ_API_KEY', model: 'GROQ_MODEL', baseUrl: 'GROQ_BASE_URL' },
   { provider: 'openrouter', key: 'OPENROUTER_API_KEY', model: 'OPENROUTER_MODEL', baseUrl: 'OPENROUTER_BASE_URL' },
   { provider: 'anthropic', key: 'ANTHROPIC_API_KEY', model: 'ANTHROPIC_MODEL' },
-  { provider: 'huggingface', key: 'HUGGINGFACE_API_KEY', fallbackKey: 'HUGGINGFACE_API_TOKEN', model: 'HUGGINGFACE_MODEL', baseUrl: 'HUGGINGFACE_BASE_URL' },
-  { provider: 'aisweden', key: 'AI_SWEDEN_API_KEY', model: 'AI_SWEDEN_MODEL', baseUrl: 'AI_SWEDEN_BASE_URL' },
+  { provider: 'huggingface', key: 'HUGGINGFACE_API_KEY', fallbackKeys: ['HF_TOKEN', 'HUGGINGFACE_API_TOKEN'], model: 'HUGGINGFACE_MODEL', baseUrl: 'HUGGINGFACE_BASE_URL' },
+  { provider: 'aisweden', key: 'AI_SWEDEN_API_KEY', fallbackKeys: ['HUGGINGFACE_API_KEY', 'HF_TOKEN', 'HUGGINGFACE_API_TOKEN'], model: 'AI_SWEDEN_MODEL', baseUrl: 'AI_SWEDEN_BASE_URL' },
   { provider: 'ollama', key: 'OLLAMA_BASE_URL', model: 'OLLAMA_MODEL', local: true },
 ] as const
 
@@ -187,9 +189,16 @@ export function getAIProviderKey(provider: AIProvider): string {
   const key = readEnv(envName)
 
   if (!key) {
-    // Preserve support for the older Hugging Face token name during migration.
-    const legacyKey = provider === 'huggingface' ? readEnv('HUGGINGFACE_API_TOKEN') : ''
-    if (legacyKey) return legacyKey
+    // Accept the standard Hugging Face token name and the older project alias.
+    const huggingFaceKey = readEnv('HF_TOKEN') || readEnv('HUGGINGFACE_API_TOKEN')
+    if (provider === 'huggingface' && huggingFaceKey) return huggingFaceKey
+    if (
+      provider === 'aisweden' &&
+      readEnv('AI_SWEDEN_PROVIDER').toLowerCase() === 'huggingface'
+    ) {
+      const hostedModelKey = readEnv('HUGGINGFACE_API_KEY') || huggingFaceKey
+      if (hostedModelKey) return hostedModelKey
+    }
     throw new Error(`Missing ${envName}.`)
   }
 
@@ -218,17 +227,17 @@ function isHttpUrl(value?: string) {
   }
 }
 
-const AI_SETUP_ENV_NAMES = [
-  'GEMINI_API_KEY',
-  'OPENAI_API_KEY',
-  'DEEPSEEK_API_KEY',
-  'GROQ_API_KEY',
-  'OPENROUTER_API_KEY',
-  'AI_SWEDEN_API_KEY',
-  'HUGGINGFACE_API_KEY',
-  'ANTHROPIC_API_KEY',
-  'OLLAMA_BASE_URL',
-]
+const AI_SETUP_PROVIDERS = [
+  { provider: 'gemini', label: 'Gemini', requirement: 'GEMINI_API_KEY' },
+  { provider: 'openai', label: 'OpenAI', requirement: 'OPENAI_API_KEY' },
+  { provider: 'deepseek', label: 'DeepSeek', requirement: 'DEEPSEEK_API_KEY' },
+  { provider: 'groq', label: 'Groq', requirement: 'GROQ_API_KEY' },
+  { provider: 'openrouter', label: 'OpenRouter', requirement: 'OPENROUTER_API_KEY' },
+  { provider: 'anthropic', label: 'Anthropic', requirement: 'ANTHROPIC_API_KEY' },
+  { provider: 'huggingface', label: 'Hugging Face', requirement: 'HUGGINGFACE_API_KEY or HF_TOKEN' },
+  { provider: 'aisweden', label: 'AI Sweden', requirement: 'AI_SWEDEN_API_KEY or Hugging Face fallback' },
+  { provider: 'ollama', label: 'Ollama', requirement: 'OLLAMA_BASE_URL' },
+] as const
 
 // Validate presence and URL shape without logging secret values.
 export function getEnvironmentValidation() {
@@ -242,13 +251,21 @@ export function getEnvironmentValidation() {
   })
 
   const providers = OPTIONAL_AI_PROVIDER_ENV.map((provider) => {
-    const configured = Boolean(getOptionalEnv(provider.key)) ||
-      ('fallbackKey' in provider && Boolean(getOptionalEnv(provider.fallbackKey)))
+    const configured = provider.provider === 'ollama'
+      ? Boolean(getOptionalEnv(provider.key))
+      : (() => {
+          try {
+            getAIProviderKey(provider.provider)
+            return true
+          } catch {
+            return false
+          }
+        })()
 
     return {
       provider: provider.provider,
       key: provider.key,
-      fallbackKey: 'fallbackKey' in provider ? provider.fallbackKey : undefined,
+      fallbackKeys: 'fallbackKeys' in provider ? provider.fallbackKeys : undefined,
       model: provider.model,
       baseUrl: 'baseUrl' in provider ? provider.baseUrl : undefined,
       configured,
@@ -273,27 +290,25 @@ export function getEnvironmentValidation() {
 }
 
 export function getAIEnvironmentDiagnostics() {
-  const missing = AI_SETUP_ENV_NAMES.filter((name) => !getOptionalEnv(name))
-  const configured = AI_SETUP_ENV_NAMES.filter((name) => getOptionalEnv(name))
+  const configured = AI_SETUP_PROVIDERS.filter(({ provider }) => {
+    if (provider === 'ollama') return Boolean(getOptionalEnv('OLLAMA_BASE_URL'))
+    try {
+      getAIProviderKey(provider)
+      return true
+    } catch {
+      return false
+    }
+  }).map(({ provider }) => provider)
+  const missing = AI_SETUP_PROVIDERS
+    .filter(({ provider }) => !configured.includes(provider))
+    .map(({ provider }) => provider)
 
   return {
     configured,
     missing,
-    hasAnyRemoteProvider: configured.some((name) => name.endsWith('_API_KEY')),
-    hasOllama: configured.includes('OLLAMA_BASE_URL'),
+    hasAnyRemoteProvider: configured.some((provider) => provider !== 'ollama'),
+    hasOllama: configured.includes('ollama'),
   }
-}
-
-const PROVIDER_LABELS: Record<string, string> = {
-  GEMINI_API_KEY: 'Gemini',
-  OPENAI_API_KEY: 'OpenAI',
-  DEEPSEEK_API_KEY: 'DeepSeek',
-  GROQ_API_KEY: 'Groq',
-  OPENROUTER_API_KEY: 'OpenRouter',
-  ANTHROPIC_API_KEY: 'Anthropic',
-  HUGGINGFACE_API_KEY: 'Hugging Face',
-  AI_SWEDEN_API_KEY: 'AI Sweden',
-  OLLAMA_BASE_URL: 'Ollama',
 }
 
 let loggedAIEnvironmentDiagnostics = false
@@ -304,15 +319,14 @@ export function logAIEnvironmentDiagnostics() {
   loggedAIEnvironmentDiagnostics = true
 
   const diagnostics = getAIEnvironmentDiagnostics()
-  const lines = AI_SETUP_ENV_NAMES.map((name) => {
-    const label = PROVIDER_LABELS[name] ?? name
-    return diagnostics.configured.includes(name)
-      ? `✓ ${label} configured`
-      : `✗ ${label} — ${name} not set`
+  const lines = AI_SETUP_PROVIDERS.map(({ provider, label, requirement }) => {
+    return diagnostics.configured.includes(provider)
+      ? `[ok] ${label} configured`
+      : `[missing] ${label} - ${requirement} not set`
   })
 
-  if (diagnostics.missing.length === AI_SETUP_ENV_NAMES.length) {
-    console.warn('[AI] No providers configured — using local fallback mode')
+  if (diagnostics.missing.length === AI_SETUP_PROVIDERS.length) {
+    console.warn('[AI] No providers configured - using local fallback mode')
     console.warn('[AI] Providers:\n' + lines.join('\n'))
     return
   }

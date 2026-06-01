@@ -18,6 +18,7 @@
     "scan": "node scan.mjs",
     "gemini:eval": "node gemini-eval.mjs",
     "check:env": "npm --prefix webapp run check:env",
+    "check:env-and-apis": "npm --prefix webapp run check:env-and-apis",
     "check:apis": "npm --prefix webapp run check:apis",
     "check:integrations": "npm --prefix webapp run check:integrations",
     "check:db": "npm --prefix webapp run check:db",

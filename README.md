@@ -184,14 +184,15 @@ OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini
 
 # Optional AI Sweden / GPT-SW3 provider
-AI_SWEDEN_API_KEY=hf_...
+AI_SWEDEN_PROVIDER=huggingface
 AI_SWEDEN_BASE_URL=
-AI_SWEDEN_MODEL=gpt-sw3
+AI_SWEDEN_MODEL=AI-Sweden-Models/gpt-sw3-356m
 
 # Optional Hugging Face provider
 HUGGINGFACE_API_KEY=hf_...
-HUGGINGFACE_BASE_URL=https://api-inference.huggingface.co
-HUGGINGFACE_MODEL=
+HF_TOKEN=hf_...
+HUGGINGFACE_BASE_URL=https://router.huggingface.co/v1
+HUGGINGFACE_MODEL=openai/gpt-oss-120b:cerebras
 
 # Swedish public APIs and career-page search catalogs
 ARBETSFORMEDLINGEN_JOBSEARCH_BASE_URL=https://jobsearch.api.jobtechdev.se
@@ -205,6 +206,8 @@ ENABLE_LIA_PRAKTIK_SEARCH=true
 
 # AI_PROVIDER=gpt-sw3
 ```
+
+The current JobSearch and Taxonomy adapters use anonymous GET requests. The diagnostics command verifies that both public JobTech endpoints respond without an API key; revisit this configuration if JobTech changes its access policy.
 
 Useful API routes:
 
@@ -220,6 +223,7 @@ Run diagnostics from the repository root:
 
 ```bash
 npm run check:env
+npm run check:env-and-apis
 npm run check:integrations
 npm run type-check
 ```

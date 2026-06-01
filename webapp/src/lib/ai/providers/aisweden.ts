@@ -1,9 +1,10 @@
 // AI Sweden GPT-SW3 adapter using a Hugging Face-compatible inference endpoint.
 import { getAIProviderKey, getOptionalEnv } from '@/lib/server/env'
 import { AIProviderError, type AIProviderClient, type ProviderRequest } from '../types'
-import { normalizeRequestError, parseProviderError, providerErrorCodeFromStatus } from './utils'
+import { normalizeBaseUrl, normalizeRequestError, parseProviderError, providerErrorCodeFromStatus } from './utils'
 
-const DEFAULT_MODEL = 'AI-Sweden-Models/gpt-sw3-6.7b-v2-instruct'
+const DEFAULT_MODEL = 'AI-Sweden-Models/gpt-sw3-356m'
+const DEFAULT_HUGGING_FACE_BASE_URL = 'https://router.huggingface.co/v1'
 // Keep the short environment value while resolving the hosted model identifier internally.
 const MODEL_ALIASES: Record<string, string> = {
   'gpt-sw3': DEFAULT_MODEL,
@@ -13,16 +14,23 @@ function buildPrompt(system: string, user: string) {
   return `${system.trim()}\n\nUser request:\n${user.trim()}\n\nAnswer:`
 }
 
-// Accept the response variants returned by hosted text-generation endpoints.
+// Accept direct text-generation and OpenAI-compatible router response shapes.
 function extractGeneratedText(data: unknown): string | null {
   if (Array.isArray(data)) {
     const first = data[0] as { generated_text?: unknown } | undefined
     return typeof first?.generated_text === 'string' ? first.generated_text : null
   }
   if (data && typeof data === 'object') {
-    const record = data as { generated_text?: unknown; generatedText?: unknown }
+    const record = data as {
+      generated_text?: unknown
+      generatedText?: unknown
+      choices?: { text?: unknown; message?: { content?: unknown } }[]
+    }
     if (typeof record.generated_text === 'string') return record.generated_text
     if (typeof record.generatedText === 'string') return record.generatedText
+    const choice = record.choices?.[0]
+    if (typeof choice?.message?.content === 'string') return choice.message.content
+    if (typeof choice?.text === 'string') return choice.text
   }
   return null
 }
@@ -31,17 +39,26 @@ function resolveModel(model: string) {
   return MODEL_ALIASES[model.toLowerCase()] ?? model
 }
 
-// Support a dedicated endpoint as well as a shared Hugging Face base URL.
+// Prefer a dedicated endpoint; Hugging Face routing is an explicit fallback mode.
 function endpointForModel(model: string) {
   const configured = getOptionalEnv('AI_SWEDEN_BASE_URL') ?? getOptionalEnv('GPT_SW3_ENDPOINT')
-  if (!configured) return `https://api-inference.huggingface.co/models/${model}`
+  if (!configured) {
+    if (getOptionalEnv('AI_SWEDEN_PROVIDER')?.toLowerCase() !== 'huggingface') {
+      throw new AIProviderError(
+        'missing_configuration',
+        'aisweden',
+        'Set AI_SWEDEN_BASE_URL for a dedicated endpoint or AI_SWEDEN_PROVIDER=huggingface for hosted fallback.'
+      )
+    }
+    const baseUrl = normalizeBaseUrl(getOptionalEnv('HUGGINGFACE_BASE_URL') ?? DEFAULT_HUGGING_FACE_BASE_URL)
+    return { url: `${baseUrl}/chat/completions`, format: 'chat' as const }
+  }
 
   const endpoint = configured.replace(/\/+$/, '')
-  if (endpoint.includes('/models/')) return endpoint
-  if (endpoint.endsWith('/models') || endpoint === 'https://api-inference.huggingface.co') {
-    return `${endpoint}${endpoint.endsWith('/models') ? '' : '/models'}/${model}`
+  return {
+    url: endpoint.endsWith('/models') ? `${endpoint}/${model}` : endpoint,
+    format: 'text-generation' as const,
   }
-  return endpoint
 }
 
 export const aiSwedenProvider: AIProviderClient = {
@@ -50,7 +67,7 @@ export const aiSwedenProvider: AIProviderClient = {
   modelEnvKey: 'AI_SWEDEN_MODEL',
   defaultModel: DEFAULT_MODEL,
   baseUrlEnvKey: 'AI_SWEDEN_BASE_URL',
-  defaultBaseUrl: `https://api-inference.huggingface.co/models/${DEFAULT_MODEL}`,
+  defaultBaseUrl: DEFAULT_HUGGING_FACE_BASE_URL,
   requiresApiKey: true,
   async complete({ system, user, maxTokens, signal }: ProviderRequest) {
     const provider = 'aisweden'
@@ -67,22 +84,31 @@ export const aiSwedenProvider: AIProviderClient = {
 
     let response: Response
     try {
-      response = await fetch(endpoint, {
+      response = await fetch(endpoint.url, {
         method: 'POST',
         signal,
         headers: {
           authorization: `Bearer ${apiKey}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({
-          inputs: buildPrompt(system, user),
-          parameters: {
-            max_new_tokens: maxTokens,
-            return_full_text: false,
-            temperature: 0.2,
-          },
-          options: { wait_for_model: true },
-        }),
+        body: JSON.stringify(endpoint.format === 'chat'
+          ? {
+              model,
+              max_tokens: maxTokens,
+              messages: [
+                { role: 'system', content: system },
+                { role: 'user', content: user },
+              ],
+            }
+          : {
+              inputs: buildPrompt(system, user),
+              parameters: {
+                max_new_tokens: maxTokens,
+                return_full_text: false,
+                temperature: 0.2,
+              },
+              options: { wait_for_model: true },
+            }),
       })
     } catch (error) {
       // Normalize network failures so retry and provider-switch rules remain consistent.

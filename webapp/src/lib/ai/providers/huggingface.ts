@@ -1,34 +1,13 @@
-// Hugging Face inference adapter for optional hosted text-generation models.
+// Hugging Face router adapter for optional hosted chat-completion models.
 import { getAIProviderKey, getOptionalEnv } from '@/lib/server/env'
 import { AIProviderError, type AIProviderClient, type ProviderRequest } from '../types'
 import { normalizeBaseUrl, normalizeRequestError, parseProviderError, providerErrorCodeFromStatus } from './utils'
 
-const DEFAULT_MODEL = 'HuggingFaceH4/zephyr-7b-beta'
-const DEFAULT_BASE_URL = 'https://api-inference.huggingface.co'
+const DEFAULT_MODEL = 'openai/gpt-oss-120b:cerebras'
+const DEFAULT_BASE_URL = 'https://router.huggingface.co/v1'
 
-function buildPrompt(system: string, user: string) {
-  return `${system.trim()}\n\nUser request:\n${user.trim()}\n\nAnswer:`
-}
-
-// Accept common generation and summarization response shapes from hosted models.
-function extractText(data: unknown): string | null {
-  if (Array.isArray(data)) {
-    const first = data[0] as { generated_text?: unknown; summary_text?: unknown } | undefined
-    if (typeof first?.generated_text === 'string') return first.generated_text
-    if (typeof first?.summary_text === 'string') return first.summary_text
-  }
-  if (data && typeof data === 'object') {
-    const record = data as { generated_text?: unknown; summary_text?: unknown }
-    if (typeof record.generated_text === 'string') return record.generated_text
-    if (typeof record.summary_text === 'string') return record.summary_text
-  }
-  return null
-}
-
-// Hugging Face inference routes are model-specific even when a shared base URL is configured.
-function endpointForModel(model: string) {
-  const baseUrl = normalizeBaseUrl(getOptionalEnv('HUGGINGFACE_BASE_URL') ?? DEFAULT_BASE_URL)
-  return baseUrl.endsWith('/models') ? `${baseUrl}/${model}` : `${baseUrl}/models/${model}`
+function baseUrl() {
+  return normalizeBaseUrl(getOptionalEnv('HUGGINGFACE_BASE_URL') ?? DEFAULT_BASE_URL)
 }
 
 export const huggingFaceProvider: AIProviderClient = {
@@ -52,7 +31,7 @@ export const huggingFaceProvider: AIProviderClient = {
     const model = getOptionalEnv('HUGGINGFACE_MODEL') ?? DEFAULT_MODEL
     let response: Response
     try {
-      response = await fetch(endpointForModel(model), {
+      response = await fetch(`${baseUrl()}/chat/completions`, {
         method: 'POST',
         signal,
         headers: {
@@ -60,13 +39,12 @@ export const huggingFaceProvider: AIProviderClient = {
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          inputs: buildPrompt(system, user),
-          parameters: {
-            max_new_tokens: maxTokens,
-            return_full_text: false,
-            temperature: 0.2,
-          },
-          options: { wait_for_model: true },
+          model,
+          max_tokens: maxTokens,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
         }),
       })
     } catch (error) {
@@ -80,8 +58,8 @@ export const huggingFaceProvider: AIProviderClient = {
     }
 
     const data = await response.json()
-    const text = extractText(data)
-    if (!text) {
+    const text = data?.choices?.[0]?.message?.content
+    if (typeof text !== 'string') {
       throw new AIProviderError('invalid_response', provider, 'Unexpected Hugging Face response format.')
     }
     return text.trim()

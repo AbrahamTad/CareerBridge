@@ -25,7 +25,8 @@ modes/_profile.md
 
 # Secrets (never commit — use .env.example as template)
 .env
-.env.local
+.env.*
+!.env.example
 
 # Generated
 .resolved-prompt-*

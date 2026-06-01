@@ -20,14 +20,13 @@ console.log('')
 console.log('AI provider variables:')
 for (const provider of validation.providers) {
   const keySource = sourceFor(provider.key, sources)
-  const fallbackSource = provider.fallbackKey ? sourceFor(provider.fallbackKey, sources) : null
-  const keyValue = getOptionalEnv(provider.key) ?? (provider.fallbackKey ? getOptionalEnv(provider.fallbackKey) : undefined)
+  const fallbackKeys = provider.fallbackKeys ?? []
+  const fallbackSources = fallbackKeys.map((key) => `${key}: ${sourceFor(key, sources)}`)
+  const keyValue = getOptionalEnv(provider.key) ?? fallbackKeys.map((key) => getOptionalEnv(key)).find(Boolean)
   const model = provider.model ? getOptionalEnv(provider.model) : undefined
   const baseUrl = provider.baseUrl ? getOptionalEnv(provider.baseUrl) : undefined
   const configText = provider.configured ? `configured (${maskValue(keyValue)})` : 'missing optional key/config'
-  const sourceText = fallbackSource && fallbackSource !== 'missing'
-    ? `${provider.key}: ${keySource}, ${provider.fallbackKey}: ${fallbackSource}`
-    : `${provider.key}: ${keySource}`
+  const sourceText = [`${provider.key}: ${keySource}`, ...fallbackSources].join(', ')
 
   console.log(`- ${provider.provider}: ${configText}; ${sourceText}`)
   if (model) console.log(`  model: ${model}`)

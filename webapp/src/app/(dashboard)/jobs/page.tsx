@@ -7,13 +7,13 @@ import { toast } from 'sonner'
 import { formatSalary } from '@/lib/utils'
 import AISearchProgress, { createAISearchStats } from '@/components/ai/AISearchProgress'
 import JobGraphVisualization from '@/components/ai/JobGraphVisualization'
+import CvDocumentPreview from '@/components/cv/CvDocumentPreview'
 import { EmptyState, PageHero, PageSurface } from '@/components/ui/ModernShell'
 import {
   copyCleanText,
   downloadCleanText,
   downloadCleanWordDocument,
   exportCleanPdf,
-  markdownToPlainText,
 } from '@/lib/document-actions'
 import { cleanCvMarkdown } from '@/lib/cv-export-format'
 
@@ -834,9 +834,7 @@ export default function JobsPage() {
               className="h-96 w-full rounded-lg border bg-white p-4 text-sm leading-relaxed text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
           ) : (
-            <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-4 font-sans text-sm leading-relaxed text-slate-700">
-              {markdownToPlainText(cleanCvMarkdown(adaptedCV.content))}
-            </pre>
+            <CvDocumentPreview markdown={adaptedCV.content} className="max-h-[34rem]" />
           )}
         </div>
       )}

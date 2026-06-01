@@ -4,12 +4,12 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Sparkles, Loader2, Download, Copy, RotateCcw } from 'lucide-react'
+import CvDocumentPreview from '@/components/cv/CvDocumentPreview'
 import {
   copyCleanText,
   downloadCleanText,
   downloadCleanWordDocument,
   exportCleanPdf,
-  markdownToPlainText,
 } from '@/lib/document-actions'
 import { cleanCvMarkdown } from '@/lib/cv-export-format'
 
@@ -228,9 +228,7 @@ export default function CVBuilderPage() {
                   className="h-96 w-full rounded-lg border bg-white p-4 text-sm leading-relaxed text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               ) : (
-                <pre className="whitespace-pre-wrap text-sm text-slate-700 font-sans leading-relaxed max-h-96 overflow-y-auto">
-                  {markdownToPlainText(cleanCvMarkdown(result.content))}
-                </pre>
+                <CvDocumentPreview markdown={result.content} className="max-h-96" />
               )}
             </div>
           ) : loading ? (

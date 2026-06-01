@@ -13,7 +13,9 @@ export async function parseProviderError(response: Response): Promise<string> {
   return response.statusText || 'Provider request failed'
 }
 
-export function providerErrorCodeFromStatus(status: number): AIErrorCode {
+// Distinguish a valid token with missing scopes from a malformed or revoked credential.
+export function providerErrorCodeFromStatus(status: number, message = ''): AIErrorCode {
+  if (status === 403 && /\b(permission|permissions|scope|scopes|forbidden)\b/i.test(message)) return 'insufficient_permissions'
   if (status === 401 || status === 403) return 'invalid_api_key'
   if (status === 408 || status === 504) return 'timeout'
   if (status === 429) return 'quota_exceeded'

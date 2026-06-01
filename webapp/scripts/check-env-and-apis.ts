@@ -234,6 +234,7 @@ function providerReason(error: unknown) {
       missing_api_key: 'missing key',
       missing_configuration: 'missing configuration',
       invalid_api_key: 'invalid key',
+      insufficient_permissions: 'insufficient inference permissions',
       quota_exceeded: 'quota exceeded',
       server_offline: 'server offline',
       timeout: 'timeout',
@@ -425,6 +426,8 @@ async function main() {
           ? 'Start the local provider or remove its base URL to skip it.'
           : result.status === 'quota exceeded'
           ? 'Check provider billing, credits, or rate limits.'
+          : result.status === 'insufficient inference permissions'
+          ? 'Create a Hugging Face token with permission to call Inference Providers, then update HUGGINGFACE_API_KEY and HF_TOKEN.'
           : 'Verify the key, model, base URL, and provider account.',
       })
     }

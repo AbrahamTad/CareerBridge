@@ -52,7 +52,43 @@ const CV_HEADING_MAP: Record<string, string> = {
   references: 'Referenser',
 }
 
-function markdownToInlineText(text: string): string {
+export type CvDocumentBlock =
+  | { type: 'heading'; text: string; level: number }
+  | { type: 'paragraph'; text: string }
+  | { type: 'bullet'; text: string }
+  | { type: 'blank' }
+
+const MOJIBAKE_REPLACEMENTS: Record<string, string> = {
+  'Ã¥': 'å',
+  'Ã¤': 'ä',
+  'Ã¶': 'ö',
+  'Ã…': 'Å',
+  'Ã„': 'Ä',
+  'Ã–': 'Ö',
+  'â€¢': '•',
+  'â€“': '–',
+  'â€”': '—',
+  'â€˜': '‘',
+  'â€™': '’',
+  'â€œ': '“',
+  'â€': '”',
+}
+
+const DECORATIVE_LINE = /^[\s\-=_*•·▪◦‣─═|]{3,}$/
+const BULLET_PREFIX = /^\s*[-*+•·▪◦‣]\s+/
+const DECORATIVE_ICON = /[\u{1F300}-\u{1FAFF}\u2600-\u27BF]\uFE0F?/gu
+
+// Repair common imported-text artifacts while preserving Swedish Unicode characters.
+export function normalizeCvCharacters(text: string): string {
+  return Object.entries(MOJIBAKE_REPLACEMENTS).reduce(
+    (cleaned, [broken, replacement]) => cleaned.replaceAll(broken, replacement),
+    text
+  )
+    .replace(/\u00a0/g, ' ')
+    .replace(/[\u200B-\u200D\uFEFF\uFFFD]/g, '')
+}
+
+export function cvMarkdownToInlineText(text: string): string {
   return text
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*\n]+)\*/g, '$1')
@@ -63,7 +99,7 @@ function markdownToInlineText(text: string): string {
 }
 
 function normalizeLabel(text: string): string {
-  return markdownToInlineText(text)
+  return cvMarkdownToInlineText(text)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/å/g, 'a')
@@ -105,6 +141,17 @@ function isInstructionLine(line: string): boolean {
   )
 }
 
+function isLikelyCandidateName(line: string): boolean {
+  const words = line.split(/\s+/).filter(Boolean)
+  return (
+    words.length >= 2 &&
+    words.length <= 5 &&
+    line.length <= 80 &&
+    /^[\p{L}][\p{L} .'-]+$/u.test(line) &&
+    !CV_HEADING_MAP[normalizeLabel(line)]
+  )
+}
+
 export function removeInternalCvSections(markdown: string): string {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n')
   const cleaned: string[] = []
@@ -134,22 +181,30 @@ export function removeInternalCvSections(markdown: string): string {
 }
 
 export function cleanCvMarkdown(markdown: string): string {
-  const lines = removeInternalCvSections(markdown)
+  const lines = removeInternalCvSections(normalizeCvCharacters(markdown))
     .replace(/^```[\w-]*\s*/gm, '')
     .replace(/```/g, '')
     .split('\n')
 
   const cleaned: string[] = []
   let previousHeading = ''
+  let hasDocumentContent = false
 
   for (const rawLine of lines) {
-    const line = rawLine.trimEnd()
+    const line = rawLine
+      .replace(DECORATIVE_ICON, '')
+      .replace(/^\s*\?{2,}\s+(?=\S)/, '')
+      .replace(/[ \t]+/g, ' ')
+      .trim()
     const normalizedLine = normalizeLabel(line)
 
-    if (!line.trim()) {
+    if (!line) {
       cleaned.push('')
       continue
     }
+
+    // Markdown rules and decorative separators do not belong in a professional CV export.
+    if (DECORATIVE_LINE.test(line)) continue
 
     if (
       normalizedLine.startsWith('anpassat cv') ||
@@ -161,6 +216,13 @@ export function cleanCvMarkdown(markdown: string): string {
 
     if (isInstructionLine(line)) continue
 
+    const inlineLine = cvMarkdownToInlineText(line)
+    if (!hasDocumentContent && isLikelyCandidateName(inlineLine)) {
+      cleaned.push(`# ${inlineLine}`)
+      hasDocumentContent = true
+      continue
+    }
+
     const heading = line.match(/^(#{1,6})\s+(.+)$/)
     if (heading) {
       const key = normalizeLabel(heading[2])
@@ -169,7 +231,8 @@ export function cleanCvMarkdown(markdown: string): string {
       if (key === previousHeading) continue
       previousHeading = key
 
-      cleaned.push(`${heading[1]} ${mappedHeading ?? markdownToInlineText(heading[2])}`)
+      cleaned.push(`${heading[1]} ${mappedHeading ?? cvMarkdownToInlineText(heading[2])}`)
+      hasDocumentContent = true
       continue
     }
 
@@ -181,13 +244,45 @@ export function cleanCvMarkdown(markdown: string): string {
         if (key === previousHeading) continue
         previousHeading = key
         cleaned.push(`## ${mappedHeading}`)
+        hasDocumentContent = true
         continue
       }
     }
 
     previousHeading = ''
-    cleaned.push(line)
+    cleaned.push(BULLET_PREFIX.test(line) ? `- ${line.replace(BULLET_PREFIX, '').trim()}` : line)
+    hasDocumentContent = true
   }
 
   return cleaned.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+// Parse the cleaned CV once so preview, PDF, Word, and text exports share one structure.
+export function cvMarkdownToBlocks(markdown: string): CvDocumentBlock[] {
+  return cleanCvMarkdown(markdown)
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((rawLine): CvDocumentBlock => {
+      const line = rawLine.trim()
+      if (!line) return { type: 'blank' }
+
+      const heading = line.match(/^(#{1,3})\s+(.+)$/)
+      if (heading) {
+        return {
+          type: 'heading',
+          level: heading[1].length,
+          text: cvMarkdownToInlineText(heading[2]),
+        }
+      }
+
+      const boldHeading = line.match(/^\*\*([^*]+)\*\*$/)
+      if (boldHeading) {
+        return { type: 'heading', level: 3, text: cvMarkdownToInlineText(boldHeading[1]) }
+      }
+
+      const bullet = line.match(/^-\s+(.+)$/)
+      if (bullet) return { type: 'bullet', text: cvMarkdownToInlineText(bullet[1]) }
+
+      return { type: 'paragraph', text: cvMarkdownToInlineText(line) }
+    })
 }

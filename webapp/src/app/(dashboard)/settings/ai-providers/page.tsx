@@ -34,6 +34,7 @@ function statusText(provider: ProviderHealth) {
     working: 'Working',
     'missing key': 'Missing key',
     'invalid key': 'Invalid key',
+    'insufficient permissions': 'Insufficient permissions',
     'quota exceeded': 'Quota exceeded',
     timeout: 'Timeout',
     'server offline': 'Server offline',

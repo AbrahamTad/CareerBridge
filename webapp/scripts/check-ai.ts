@@ -29,6 +29,7 @@ function badge(p: ProviderHealth): string {
     working: '✓ Working',
     'missing key': '✗ Missing API Key',
     'invalid key': '✗ Invalid API Key',
+    'insufficient permissions': '✗ Insufficient Permissions',
     'quota exceeded': '✗ Quota Exceeded',
     timeout: '✗ Timeout',
     'server offline': '✗ Offline',

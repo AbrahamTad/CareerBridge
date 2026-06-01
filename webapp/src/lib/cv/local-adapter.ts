@@ -1,4 +1,4 @@
-import { cleanCvMarkdown } from '@/lib/cv-export-format'
+import { cleanCvMarkdown, normalizeCvCharacters } from '@/lib/cv-export-format'
 
 type SectionKey = 'profile' | 'experience' | 'education' | 'skills' | 'languages' | 'references'
 
@@ -28,7 +28,9 @@ function normalize(text: string) {
 }
 
 function cleanLine(line: string) {
-  return line
+  return normalizeCvCharacters(line)
+    .replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]\uFE0F?/gu, '')
+    .replace(/^\s*\?{2,}\s+(?=\S)/, '')
     .replace(/^[-*•]\s+/, '')
     .replace(/\s+/g, ' ')
     .trim()
@@ -119,8 +121,9 @@ export function buildLocalAdaptedCv(cvText: string, jobTitle: string, companyNam
   const languages = extractSection(cvText, 'languages', 6)
   const references = extractSection(cvText, 'references', 2)
 
+  // Do not invent personal qualities when the uploaded CV does not include a profile.
   const profileText = profile.join(' ') ||
-    `Strukturerad kandidat med relevant bakgrund för rollen ${jobTitle}${companyName ? ` hos ${companyName}` : ''}. Noggrann, ansvarstagande och van att snabbt sätta sig in i nya arbetsuppgifter.`
+    `Relevant erfarenhet och utbildning för ${jobTitle}${companyName ? ` hos ${companyName}` : ''} framgår av avsnitten nedan.`
 
   return cleanCvMarkdown([
     `# ${name}`,

@@ -33,6 +33,7 @@ function statusLine(p: ProviderHealth): string {
   if (p.checkStatus === 'quota exceeded') return `✗  quota exceeded`
   if (p.checkStatus === 'missing key') return `✗  missing key (${p.envKey})`
   if (p.checkStatus === 'invalid key') return `✗  invalid key`
+  if (p.checkStatus === 'insufficient permissions') return `✗  insufficient permissions`
   if (p.checkStatus === 'server offline') return `✗  offline`
   if (p.checkStatus === 'timeout') return `✗  timeout (${p.responseTimeMs}ms)`
   if (p.checkStatus === 'skipped') return `○  not configured`

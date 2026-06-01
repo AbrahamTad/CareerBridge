@@ -54,7 +54,7 @@ export const huggingFaceProvider: AIProviderClient = {
 
     if (!response.ok) {
       const message = await parseProviderError(response)
-      throw new AIProviderError(providerErrorCodeFromStatus(response.status), provider, message, response.status)
+      throw new AIProviderError(providerErrorCodeFromStatus(response.status, message), provider, message, response.status)
     }
 
     const data = await response.json()

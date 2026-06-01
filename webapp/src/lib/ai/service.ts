@@ -49,6 +49,13 @@ export function getFriendlyAIError(error: unknown, fallback = 'AI request failed
     }
   }
 
+  if (error.code === 'insufficient_permissions') {
+    return {
+      message: `${providerLabel(error.provider)} token lacks required permissions. Check the provider token scopes.`,
+      status: 403,
+    }
+  }
+
   if (error.code === 'quota_exceeded' || error.status === 429) {
     return {
       message: `${providerLabel(error.provider)} quota or rate limit reached. Check billing, credits, or rate limits.`,
@@ -290,14 +297,16 @@ Rules:
 - Keep every claim honest and grounded in the original CV. Do not invent jobs, certificates, education, employers, dates, tools, languages, or metrics.
 - Rewrite in natural language that sounds like a real person, not a template and not AI-generated.
 - Prefer simple, confident sentences over buzzwords.
+- Write concise, idiomatic Swedish with concrete verbs. Avoid padded phrases, repeated claims, and robotic wording.
 - Mirror important words from the job ad only when they genuinely fit the candidate's experience.
 - Reorder and emphasize the most relevant experience for this exact role.
 - Keep the candidate's personality and practical strengths visible.
 - Produce a finished professional CV only, not an AI report or job-match analysis.
 - The first heading must be the candidate's full name, not "Anpassat CV", the job title, or the company name.
-- Put contact information directly below the name.
+- Put contact information directly below the name as plain text lines. Do not use emoji, icons, or decorative symbols.
 - Use this structure only: Profil, Arbetslivserfarenhet, Utbildning, Kompetenser och IT-kunskaper, Språk, Referenser.
 - Use bullet points for responsibilities and achievements under experience.
+- Do not add horizontal rules, decorative separators, or standalone "---" lines.
 - Keep the CV concise enough for 1-2 pages.
 - Remove vague filler such as "dynamic", "passionate", "results-driven", "leveraging", and "proven track record" unless the original CV uses them naturally.
 - Return only the complete adapted CV in clean markdown.

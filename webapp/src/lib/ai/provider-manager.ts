@@ -46,7 +46,7 @@ function missingConfigurationCode(provider: AIProvider): AIErrorCode {
 // Retry transient failures on the same provider before switching to another provider.
 function shouldRetryProvider(error: unknown) {
   if (!(error instanceof AIProviderError)) return true
-  if (error.code === 'missing_api_key' || error.code === 'missing_configuration' || error.code === 'invalid_api_key') return false
+  if (error.code === 'missing_api_key' || error.code === 'missing_configuration' || error.code === 'invalid_api_key' || error.code === 'insufficient_permissions') return false
   if (error.code === 'timeout') return true
   if (error.code === 'quota_exceeded' || error.status === 429) return false
   return !error.status || error.status >= 500
@@ -55,7 +55,7 @@ function shouldRetryProvider(error: unknown) {
 // Configuration, quota, timeout, and server failures should continue down the fallback list.
 function shouldTryNextProvider(error: unknown) {
   if (!(error instanceof AIProviderError)) return true
-  if (error.code === 'missing_api_key' || error.code === 'missing_configuration' || error.code === 'invalid_api_key') return true
+  if (error.code === 'missing_api_key' || error.code === 'missing_configuration' || error.code === 'invalid_api_key' || error.code === 'insufficient_permissions') return true
   return error.code === 'quota_exceeded' || error.code === 'server_offline' || error.code === 'timeout' || error.code === 'invalid_response' || !error.status || error.status === 429 || error.status >= 500
 }
 
@@ -63,6 +63,7 @@ function checkStatusFromError(error: unknown, local: boolean): AIProviderCheckSt
   if (!(error instanceof AIProviderError)) return 'unknown error'
   if (error.code === 'missing_api_key' || error.code === 'missing_configuration') return local ? 'skipped' : 'missing key'
   if (error.code === 'invalid_api_key') return 'invalid key'
+  if (error.code === 'insufficient_permissions') return 'insufficient permissions'
   if (error.code === 'quota_exceeded' || error.status === 429) return 'quota exceeded'
   if (error.code === 'timeout') return 'timeout'
   if (error.code === 'request_failed' && !error.status) return 'server offline'
@@ -102,6 +103,7 @@ function logProviderAttempt(
     : providerError?.code === 'timeout' ? 'timeout'
     : providerError?.code === 'server_offline' ? 'offline'
     : providerError?.code === 'invalid_api_key' ? 'invalid key'
+    : providerError?.code === 'insufficient_permissions' ? 'insufficient permissions'
     : providerError?.code === 'missing_api_key' || providerError?.code === 'missing_configuration' ? 'no key'
     : providerError?.code === 'invalid_response' ? 'invalid response'
     : sanitizeProviderMessage(providerError?.message ?? 'failed').slice(0, 60)

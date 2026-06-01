@@ -1,10 +1,12 @@
-import { cleanCvMarkdown, removeInternalCvSections } from './cv-export-format'
+import {
+  cvMarkdownToBlocks,
+  cvMarkdownToInlineText,
+  normalizeCvCharacters,
+  removeInternalCvSections,
+  type CvDocumentBlock,
+} from './cv-export-format'
 
-type DocumentBlock =
-  | { type: 'heading'; text: string; level: number }
-  | { type: 'paragraph'; text: string }
-  | { type: 'bullet'; text: string }
-  | { type: 'blank' }
+type DocumentBlock = CvDocumentBlock
 
 type DocumentRenderOptions = {
   includeTitle?: boolean
@@ -16,7 +18,7 @@ function removeTailoringNotes(markdown: string): string {
 }
 
 export function markdownToPlainText(markdown: string): string {
-  return removeTailoringNotes(markdown)
+  return normalizeCvCharacters(removeTailoringNotes(markdown))
     .replace(/\r\n/g, '\n')
     .replace(/^```[\w-]*\s*/gm, '')
     .replace(/```/g, '')
@@ -26,7 +28,7 @@ export function markdownToPlainText(markdown: string): string {
     .replace(/\*([^*\n]+)\*/g, '$1')
     .replace(/__([^_]+)__/g, '$1')
     .replace(/_([^_\n]+)_/g, '$1')
-    .replace(/^\s*[-*•]\s+/gm, '- ')
+    .replace(/^\s*[-*+•·▪◦‣]\s+/gm, '• ')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -64,9 +66,9 @@ function downloadBlob(content: BlobPart, mimeType: string, fileName: string) {
 }
 
 function parseMarkdown(markdown: string, options: DocumentRenderOptions = {}): DocumentBlock[] {
-  const source = options.variant === 'cv' ? cleanCvMarkdown(markdown) : removeTailoringNotes(markdown)
+  if (options.variant === 'cv') return cvMarkdownToBlocks(markdown)
 
-  return source
+  return removeTailoringNotes(markdown)
     .replace(/\r\n/g, '\n')
     .split('\n')
     .map((rawLine): DocumentBlock => {
@@ -78,46 +80,55 @@ function parseMarkdown(markdown: string, options: DocumentRenderOptions = {}): D
         return {
           type: 'heading',
           level: heading[1].length,
-          text: markdownToInlineText(heading[2]),
+          text: cvMarkdownToInlineText(heading[2]),
         }
       }
 
       const boldHeading = line.match(/^\*\*([^*]+)\*\*$/)
       if (boldHeading) {
-        return { type: 'heading', level: 3, text: markdownToInlineText(boldHeading[1]) }
+        return { type: 'heading', level: 3, text: cvMarkdownToInlineText(boldHeading[1]) }
       }
 
-      const bullet = line.match(/^[-*•]\s+(.+)$/)
-      if (bullet) return { type: 'bullet', text: markdownToInlineText(bullet[1]) }
+      const bullet = line.match(/^[-*+•·▪◦‣]\s+(.+)$/)
+      if (bullet) return { type: 'bullet', text: cvMarkdownToInlineText(bullet[1]) }
 
-      return { type: 'paragraph', text: markdownToInlineText(line) }
+      return { type: 'paragraph', text: cvMarkdownToInlineText(line) }
     })
 }
 
-function markdownToInlineText(text: string): string {
-  return text
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*\n]+)\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/_([^_\n]+)_/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .trim()
-}
-
-function renderHtmlDocument(markdown: string, title: string, options: DocumentRenderOptions = {}): string {
+export function renderHtmlDocument(markdown: string, title: string, options: DocumentRenderOptions = {}): string {
   const isCv = options.variant === 'cv'
   const blocks = parseMarkdown(markdown, options)
-  const body = blocks
-    .map((block) => {
-      if (block.type === 'blank') return '<div class="spacer"></div>'
-      if (block.type === 'heading') {
-        const tag = block.level === 1 ? 'h1' : block.level === 2 ? 'h2' : 'h3'
-        return `<${tag}>${escapeHtml(block.text)}</${tag}>`
+  const body: string[] = []
+  let listOpen = false
+
+  const closeList = () => {
+    if (!listOpen) return
+    body.push('</ul>')
+    listOpen = false
+  }
+
+  for (const block of blocks) {
+    if (block.type === 'bullet') {
+      if (!listOpen) {
+        body.push('<ul>')
+        listOpen = true
       }
-      if (block.type === 'bullet') return `<p class="bullet">• ${escapeHtml(block.text)}</p>`
-      return `<p>${escapeHtml(block.text)}</p>`
-    })
-    .join('\n')
+      body.push(`<li>${escapeHtml(block.text)}</li>`)
+      continue
+    }
+
+    closeList()
+    if (block.type === 'blank') {
+      body.push('<div class="spacer"></div>')
+    } else if (block.type === 'heading') {
+      const tag = block.level === 1 ? 'h1' : block.level === 2 ? 'h2' : 'h3'
+      body.push(`<${tag}>${escapeHtml(block.text)}</${tag}>`)
+    } else {
+      body.push(`<p>${escapeHtml(block.text)}</p>`)
+    }
+  }
+  closeList()
 
   return `<!doctype html>
 <html>
@@ -130,7 +141,7 @@ function renderHtmlDocument(markdown: string, title: string, options: DocumentRe
       font-family: Aptos, Calibri, Arial, sans-serif;
       font-size: ${isCv ? '10.5pt' : '11pt'};
       line-height: ${isCv ? '1.36' : '1.45'};
-      margin: ${isCv ? '30px 42px' : '34px 46px'};
+      margin: ${isCv ? '34px 44px' : '34px 46px'};
     }
     h1 {
       border-bottom: ${isCv ? '1px solid #cbd5e1' : '2px solid #2563eb'};
@@ -138,6 +149,9 @@ function renderHtmlDocument(markdown: string, title: string, options: DocumentRe
       font-size: ${isCv ? '24pt' : '22pt'};
       margin: 0 0 ${isCv ? '8px' : '14px'};
       padding-bottom: 8px;
+    }
+    h1, h2, h3 {
+      page-break-after: avoid;
     }
     h2 {
       border-top: ${isCv ? '1px solid #e5e7eb' : '0'};
@@ -155,8 +169,13 @@ function renderHtmlDocument(markdown: string, title: string, options: DocumentRe
     p {
       margin: 0 0 ${isCv ? '5px' : '7px'};
     }
-    .bullet {
-      margin-left: ${isCv ? '13px' : '16px'};
+    ul {
+      margin: ${isCv ? '3px 0 7px 19px' : '5px 0 9px 22px'};
+      padding: 0;
+    }
+    li {
+      margin: 0 0 ${isCv ? '3px' : '5px'};
+      page-break-inside: avoid;
     }
     .spacer {
       height: ${isCv ? '5px' : '8px'};
@@ -164,19 +183,23 @@ function renderHtmlDocument(markdown: string, title: string, options: DocumentRe
   </style>
 </head>
 <body>
-${body}
+${body.join('\n')}
 </body>
 </html>`
 }
 
 function pdfText(text: string): string {
   return text
-    // Keep the hand-built PDF stream inside WinAnsi-friendly characters.
-    .replace(/[•]/g, '-')
-    .replace(/[–—]/g, '-')
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/[^\x09\x0a\x0d\x20-\xff]/g, '?')
+    // Map punctuation outside Latin-1 to its Windows-1252 byte before writing the PDF stream.
+    .replace(/€/g, '\x80')
+    .replace(/‘/g, '\x91')
+    .replace(/’/g, '\x92')
+    .replace(/“/g, '\x93')
+    .replace(/”/g, '\x94')
+    .replace(/•/g, '\x95')
+    .replace(/–/g, '\x96')
+    .replace(/—/g, '\x97')
+    .replace(/[^\x09\x0a\x0d\x20-\xff]/g, '')
     .replace(/\\/g, '\\\\')
     .replace(/\(/g, '\\(')
     .replace(/\)/g, '\\)')
@@ -201,7 +224,7 @@ function wrapText(text: string, maxChars: number): string[] {
   return lines.length ? lines : ['']
 }
 
-function createPdf(markdown: string, title: string, options: DocumentRenderOptions = {}): Uint8Array {
+export function createPdf(markdown: string, title: string, options: DocumentRenderOptions = {}): Uint8Array {
   const pageWidth = 595
   const pageHeight = 842
   const isCv = options.variant === 'cv'
@@ -217,6 +240,10 @@ function createPdf(markdown: string, title: string, options: DocumentRenderOptio
     if (content) pages.push(content)
     content = ''
     y = pageHeight - marginTop
+  }
+
+  const ensureSpace = (minimumHeight: number) => {
+    if (y < marginBottom + minimumHeight) addPage()
   }
 
   const addTextLine = (text: string, size: number, font: 'F1' | 'F2', indent = 0) => {
@@ -242,6 +269,7 @@ function createPdf(markdown: string, title: string, options: DocumentRenderOptio
     }
 
     if (block.type === 'heading') {
+      ensureSpace(block.level === 1 ? 62 : 42)
       y -= block.level === 1 ? (isCv ? 4 : 10) : (isCv ? 6 : 7)
       const text = isCv && block.level === 2 ? block.text.toUpperCase() : block.text
       const size = isCv
@@ -311,7 +339,7 @@ export function downloadCleanWordDocument(
   options: DocumentRenderOptions = {},
 ) {
   downloadBlob(
-    renderHtmlDocument(markdown, title, options),
+    `\uFEFF${renderHtmlDocument(markdown, title, options)}`,
     'application/msword;charset=utf-8',
     createFileName(title, 'doc'),
   )

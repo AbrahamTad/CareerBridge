@@ -14,7 +14,7 @@ function buildPrompt(system: string, user: string) {
   return `${system.trim()}\n\nUser request:\n${user.trim()}\n\nAnswer:`
 }
 
-// Accept direct text-generation and OpenAI-compatible router response shapes.
+// Accept direct text-generation and OpenAI-compatible completion response shapes.
 function extractGeneratedText(data: unknown): string | null {
   if (Array.isArray(data)) {
     const first = data[0] as { generated_text?: unknown } | undefined
@@ -39,19 +39,32 @@ function resolveModel(model: string) {
   return MODEL_ALIASES[model.toLowerCase()] ?? model
 }
 
+// GPT-SW3 is served as text generation by Featherless AI through the Hugging Face router.
+function huggingFaceCompletionUrl(configured?: string) {
+  const routerUrl = normalizeBaseUrl(configured ?? DEFAULT_HUGGING_FACE_BASE_URL)
+  if (routerUrl.endsWith('/completions')) return routerUrl
+  if (routerUrl.endsWith('/featherless-ai/v1')) return `${routerUrl}/completions`
+  if (routerUrl.endsWith('/v1')) return `${routerUrl.slice(0, -3)}/featherless-ai/v1/completions`
+  return `${routerUrl}/featherless-ai/v1/completions`
+}
+
 // Prefer a dedicated endpoint; Hugging Face routing is an explicit fallback mode.
 function endpointForModel(model: string) {
   const configured = getOptionalEnv('AI_SWEDEN_BASE_URL') ?? getOptionalEnv('GPT_SW3_ENDPOINT')
-  if (!configured) {
-    if (getOptionalEnv('AI_SWEDEN_PROVIDER')?.toLowerCase() !== 'huggingface') {
-      throw new AIProviderError(
-        'missing_configuration',
-        'aisweden',
-        'Set AI_SWEDEN_BASE_URL for a dedicated endpoint or AI_SWEDEN_PROVIDER=huggingface for hosted fallback.'
-      )
-    }
+  if (getOptionalEnv('AI_SWEDEN_PROVIDER')?.toLowerCase() === 'huggingface') {
     const baseUrl = normalizeBaseUrl(getOptionalEnv('HUGGINGFACE_BASE_URL') ?? DEFAULT_HUGGING_FACE_BASE_URL)
-    return { url: `${baseUrl}/chat/completions`, format: 'chat' as const }
+    return {
+      url: huggingFaceCompletionUrl(configured ?? baseUrl),
+      format: 'completion' as const,
+    }
+  }
+
+  if (!configured) {
+    throw new AIProviderError(
+      'missing_configuration',
+      'aisweden',
+      'Set AI_SWEDEN_BASE_URL for a dedicated endpoint or AI_SWEDEN_PROVIDER=huggingface for hosted fallback.'
+    )
   }
 
   const endpoint = configured.replace(/\/+$/, '')
@@ -91,14 +104,12 @@ export const aiSwedenProvider: AIProviderClient = {
           authorization: `Bearer ${apiKey}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify(endpoint.format === 'chat'
+        body: JSON.stringify(endpoint.format === 'completion'
           ? {
               model,
+              prompt: buildPrompt(system, user),
               max_tokens: maxTokens,
-              messages: [
-                { role: 'system', content: system },
-                { role: 'user', content: user },
-              ],
+              temperature: 0.2,
             }
           : {
               inputs: buildPrompt(system, user),
@@ -117,7 +128,7 @@ export const aiSwedenProvider: AIProviderClient = {
 
     if (!response.ok) {
       const message = await parseProviderError(response)
-      throw new AIProviderError(providerErrorCodeFromStatus(response.status), provider, message, response.status)
+      throw new AIProviderError(providerErrorCodeFromStatus(response.status, message), provider, message, response.status)
     }
 
     const data = await response.json()

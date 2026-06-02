@@ -43,6 +43,7 @@ interface JobListing {
     missingSkills?: string[]
     reason?: string
     improvementTips?: string[]
+    scoreBreakdown?: Record<string, number> | null
   } | null
 }
 
@@ -409,6 +410,7 @@ export default function JobsPage() {
             missingSkills: data.missingSkills,
             reason: data.reason,
             improvementTips: data.improvementTips,
+            scoreBreakdown: data.scoreBreakdown ?? null,
           },
         } : j)
         return [...updated].sort((a, b) => {
@@ -970,22 +972,8 @@ export default function JobsPage() {
                     )}
                     {job.jobType && <span>⏰ {job.jobType}</span>}
                   </div>
-                  {job.match?.reason && (
-                    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                      <p>{job.match.reason}</p>
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                        {(job.match.matchedSkills ?? []).slice(0, 6).map((skill) => (
-                          <span key={`matched-${job.id}-${skill}`} className="rounded-full bg-green-100 px-2 py-0.5 font-medium text-green-700">
-                            {skill}
-                          </span>
-                        ))}
-                        {(job.match.missingSkills ?? []).slice(0, 4).map((skill) => (
-                          <span key={`missing-${job.id}-${skill}`} className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800">
-                            Saknas: {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
+                  {job.match && (
+                    <MatchBreakdown match={job.match} jobId={job.id} />
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -1033,6 +1021,79 @@ export default function JobsPage() {
           ))}
         </div>
       ))}
+    </div>
+  )
+}
+
+// Score dimension metadata: label, max points, Swedish display name.
+const BREAKDOWN_DIMS = [
+  { key: 'skills',          label: 'Kompetenser',    max: 35 },
+  { key: 'role',            label: 'Rollanpassning', max: 15 },
+  { key: 'experience',      label: 'Erfarenhet',     max: 20 },
+  { key: 'education',       label: 'Utbildning',     max: 15 },
+  { key: 'locationLanguage',label: 'Plats & språk',  max: 10 },
+] as const
+
+function barColor(pct: number) {
+  if (pct >= 70) return 'bg-green-500'
+  if (pct >= 40) return 'bg-amber-400'
+  return 'bg-red-400'
+}
+
+type MatchData = NonNullable<JobListing['match']>
+
+function MatchBreakdown({ match, jobId }: { match: MatchData; jobId: string }) {
+  const [open, setOpen] = useState(false)
+  const hasBreakdown = match.scoreBreakdown && Object.keys(match.scoreBreakdown).length > 0
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+      <p className="leading-snug">{match.reason}</p>
+
+      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+        {(match.matchedSkills ?? []).slice(0, 6).map((skill) => (
+          <span key={`m-${jobId}-${skill}`} className="rounded-full bg-green-100 px-2 py-0.5 font-medium text-green-700">
+            {skill}
+          </span>
+        ))}
+        {(match.missingSkills ?? []).slice(0, 4).map((skill) => (
+          <span key={`x-${jobId}-${skill}`} className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800">
+            Saknas: {skill}
+          </span>
+        ))}
+      </div>
+
+      {hasBreakdown && (
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="mt-2 text-xs font-medium text-slate-500 hover:text-slate-700"
+        >
+          {open ? '▲ Dölj poängfördelning' : '▼ Visa poängfördelning'}
+        </button>
+      )}
+
+      {open && hasBreakdown && (
+        <div className="mt-3 space-y-2">
+          {BREAKDOWN_DIMS.map(({ key, label, max }) => {
+            const raw = match.scoreBreakdown![key] ?? 0
+            const pct = Math.round(Math.min(100, (raw / max) * 100))
+            return (
+              <div key={key} className="flex items-center gap-2 text-xs">
+                <span className="w-28 shrink-0 text-slate-500">{label}</span>
+                <div className="flex-1 overflow-hidden rounded-full bg-slate-200 h-1.5">
+                  <div
+                    className={`h-1.5 rounded-full transition-all ${barColor(pct)}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <span className="w-10 text-right font-medium text-slate-600">
+                  {raw.toFixed(0)}/{max}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

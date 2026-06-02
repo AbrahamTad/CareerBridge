@@ -23,6 +23,10 @@ function matchResponse(jobListingId: string, match: JobMatchRecord) {
     ? raw.improvementTips.filter((item): item is string => typeof item === 'string')
     : match.recommendations
 
+  const scoreBreakdown = raw.scoreBreakdown && typeof raw.scoreBreakdown === 'object' && !Array.isArray(raw.scoreBreakdown)
+    ? raw.scoreBreakdown as Record<string, number>
+    : null
+
   return {
     jobId: jobListingId,
     matchScore,
@@ -31,6 +35,7 @@ function matchResponse(jobListingId: string, match: JobMatchRecord) {
     missingSkills: match.missingSkills,
     reason: match.aiReasoning ?? match.aiSummary ?? match.recommendation ?? '',
     improvementTips,
+    scoreBreakdown,
     match,
   }
 }

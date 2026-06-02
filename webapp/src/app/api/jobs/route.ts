@@ -99,6 +99,10 @@ export async function GET(request: NextRequest) {
       ? raw.improvementTips.filter((item): item is string => typeof item === 'string')
       : match?.recommendations ?? []
 
+    const breakdown = raw.scoreBreakdown && typeof raw.scoreBreakdown === 'object' && !Array.isArray(raw.scoreBreakdown)
+      ? raw.scoreBreakdown as Record<string, number>
+      : null
+
     return {
       ...j,
       sourceUrl: visibleSourceUrl(j.sourceUrl, j.sourceAts),
@@ -111,6 +115,7 @@ export async function GET(request: NextRequest) {
         missingSkills: match.missingSkills,
         reason: match.aiReasoning ?? match.aiSummary ?? match.recommendation ?? '',
         improvementTips,
+        scoreBreakdown: breakdown,
       } : null,
       matches: undefined,
     }

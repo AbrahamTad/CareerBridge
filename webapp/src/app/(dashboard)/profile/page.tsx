@@ -34,6 +34,8 @@ export default function ProfilePage() {
     liaEnabled?: boolean;
     liaDate1Start?: string | null;
     liaDate1End?: string | null;
+    liaDate2Start?: string | null;
+    liaDate2End?: string | null;
     skills?: string[];
     bio?: string | null;
   } | null>(null);
@@ -198,6 +200,8 @@ export default function ProfilePage() {
       liaEnabled: form.get("liaEnabled") === "on",
       liaDate1Start: (form.get("liaDate1Start") as string) || null,
       liaDate1End: (form.get("liaDate1End") as string) || null,
+      liaDate2Start: (form.get("liaDate2Start") as string) || null,
+      liaDate2End: (form.get("liaDate2End") as string) || null,
       targetRoles: (form.get("targetRoles") as string)
         .split(",")
         .map((s) => s.trim())
@@ -567,9 +571,7 @@ export default function ProfilePage() {
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                LIA 1 start
-              </label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">LIA 1 start</label>
               <input
                 name="liaDate1Start"
                 type="date"
@@ -578,13 +580,29 @@ export default function ProfilePage() {
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                LIA 1 slut
-              </label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">LIA 1 slut</label>
               <input
                 name="liaDate1End"
                 type="date"
                 defaultValue={profile?.liaDate1End?.slice(0, 10) ?? ""}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">LIA 2 start</label>
+              <input
+                name="liaDate2Start"
+                type="date"
+                defaultValue={profile?.liaDate2Start?.slice(0, 10) ?? ""}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">LIA 2 slut</label>
+              <input
+                name="liaDate2End"
+                type="date"
+                defaultValue={profile?.liaDate2End?.slice(0, 10) ?? ""}
                 className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
             </div>

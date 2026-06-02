@@ -82,6 +82,83 @@ interface ProfileLocation {
   targetRoles?: string[]
   skills?: string[]
   liaEnabled?: boolean
+  liaDate1Start?: string | null
+  liaDate1End?: string | null
+  liaDate2Start?: string | null
+  liaDate2End?: string | null
+}
+
+interface LiaPeriod {
+  label: string      // "LIA 1" | "LIA 2"
+  start: Date
+  end: Date
+  shortDate: string  // "sept 2026"
+}
+
+function parseLiaPeriods(profile: ProfileLocation): LiaPeriod[] {
+  const periods: LiaPeriod[] = []
+  if (profile.liaDate1Start && profile.liaDate1End) {
+    const start = new Date(profile.liaDate1Start)
+    const end = new Date(profile.liaDate1End)
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+      periods.push({
+        label: 'LIA 1',
+        start,
+        end,
+        shortDate: start.toLocaleDateString('sv-SE', { month: 'short', year: 'numeric' }),
+      })
+    }
+  }
+  if (profile.liaDate2Start && profile.liaDate2End) {
+    const start = new Date(profile.liaDate2Start)
+    const end = new Date(profile.liaDate2End)
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+      periods.push({
+        label: 'LIA 2',
+        start,
+        end,
+        shortDate: start.toLocaleDateString('sv-SE', { month: 'short', year: 'numeric' }),
+      })
+    }
+  }
+  return periods
+}
+
+// Return which LIA period(s) this job is relevant for.
+// Jobs with closingAt already passed are flagged as possibly closed.
+// Jobs without closingAt are assumed relevant for the next upcoming period.
+function liaRelevance(
+  closingAt: string | null,
+  postedAt: string | null,
+  periods: LiaPeriod[]
+): { tag: string; color: string } | null {
+  if (!periods.length) return null
+  const now = new Date()
+  const closing = closingAt ? new Date(closingAt) : null
+
+  if (closing && closing < now) {
+    return { tag: 'Stängd', color: 'bg-slate-100 text-slate-500' }
+  }
+
+  for (const period of periods) {
+    if (period.start < now) continue // period already started/passed
+
+    // Window: employer posts 90 days before LIA start through period end
+    const windowStart = new Date(period.start.getTime() - 90 * 24 * 60 * 60 * 1000)
+    const ref = closing ?? (postedAt ? new Date(postedAt) : now)
+
+    if (ref >= windowStart && ref <= period.end) {
+      return { tag: period.label, color: 'bg-violet-100 text-violet-700' }
+    }
+  }
+
+  // No closing date — tag with the soonest upcoming period
+  if (!closing) {
+    const next = periods.find((p) => p.start > now)
+    if (next) return { tag: next.label, color: 'bg-violet-100 text-violet-700' }
+  }
+
+  return null
 }
 
 interface AdaptedCVResult {
@@ -148,6 +225,7 @@ export default function JobsPage() {
   const [showOnlyStrongMatches, setShowOnlyStrongMatches] = useState(true)
   const [graphSkills, setGraphSkills] = useState<string[]>([])
   const [pollingStats, setPollingStats] = useState<import('@/components/ai/AISearchProgress').AISearchProgressStats | null>(null)
+  const [liaPeriods, setLiaPeriods] = useState<LiaPeriod[]>([])
   const activeSearch = useRef<AbortController | null>(null)
   const autoSourceScanDone = useRef(false)
   const lastSearchTerms = Array.isArray(lastSmartResult?.searchedFor) && lastSmartResult.searchedFor.length
@@ -308,6 +386,7 @@ export default function JobsPage() {
     setProfileLocation(place)
     setQuery((current) => current || defaultValues.query)
     setLiaOnly((current) => current || defaultValues.liaOnly)
+    setLiaPeriods(parseLiaPeriods(data.profile ?? {}))
     // Default to all Sweden so AI search does not accidentally narrow to one suburb.
     setLocation((current) => current || defaultValues.location)
 
@@ -653,6 +732,21 @@ export default function JobsPage() {
         </div>
       )}
 
+      {/* LIA period info banner */}
+      {liaOnly && liaPeriods.length > 0 && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm">
+          <span className="font-semibold text-violet-900">Dina LIA-perioder: </span>
+          {liaPeriods.map((p, i) => (
+            <span key={p.label} className="text-violet-700">
+              {i > 0 && ' · '}
+              <strong>{p.label}</strong> {p.start.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' })}
+              {' – '}
+              {p.end.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Filters */}
       <form onSubmit={handleSearch} className="rounded-xl border bg-white p-4">
         <div className="flex flex-wrap gap-3">
@@ -954,7 +1048,15 @@ export default function JobsPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-semibold text-slate-900">{job.title}</h3>
                     {job.isLia && (
-                      <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">LIA</span>
+                      <>
+                        <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">LIA</span>
+                        {(() => {
+                          const rel = liaRelevance(job.closingAt, job.postedAt, liaPeriods)
+                          return rel ? (
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${rel.color}`}>{rel.tag}</span>
+                          ) : null
+                        })()}
+                      </>
                     )}
                     {job.match && (
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${tierColors[job.match.tier]}`}>

@@ -19,8 +19,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     where: { id },
     data: {
       status: body.status ?? undefined,
-      notes: body.notes ?? undefined,
-      appliedAt: body.appliedAt ? new Date(body.appliedAt) : undefined,
+      notes: body.notes !== undefined ? (body.notes || null) : undefined,
+      appliedAt: body.appliedAt ? new Date(body.appliedAt) : body.appliedAt === null ? null : undefined,
+      interviewAt: body.interviewAt ? new Date(body.interviewAt) : body.interviewAt === null ? null : undefined,
     },
   })
 

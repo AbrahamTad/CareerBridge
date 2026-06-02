@@ -2,7 +2,7 @@
 
 // Dashboard for searching, ranking, and adapting CVs for Swedish job opportunities.
 import { useState, useEffect, useRef } from 'react'
-import { Search, Filter, Loader2, ExternalLink, BookmarkPlus, BrainCircuit, Sparkles, FileText, Copy, X, MapPin, Download } from 'lucide-react'
+import { Search, Filter, Loader2, ExternalLink, BookmarkPlus, BrainCircuit, Sparkles, FileText, Copy, X, MapPin, Download, GraduationCap } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatSalary } from '@/lib/utils'
 import AISearchProgress, { createAISearchStats } from '@/components/ai/AISearchProgress'
@@ -16,6 +16,7 @@ import {
   exportCleanPdf,
 } from '@/lib/document-actions'
 import { cleanCvMarkdown } from '@/lib/cv-export-format'
+import type { InterviewPrepResult } from '@/app/api/ai/interview-prep/route'
 
 interface JobListing {
   id: string
@@ -226,6 +227,8 @@ export default function JobsPage() {
   const [graphSkills, setGraphSkills] = useState<string[]>([])
   const [pollingStats, setPollingStats] = useState<import('@/components/ai/AISearchProgress').AISearchProgressStats | null>(null)
   const [liaPeriods, setLiaPeriods] = useState<LiaPeriod[]>([])
+  const [interviewPrep, setInterviewPrep] = useState<Record<string, InterviewPrepResult>>({})
+  const [prepLoading, setPrepLoading] = useState<string | null>(null)
   const activeSearch = useRef<AbortController | null>(null)
   const autoSourceScanDone = useRef(false)
   const lastSearchTerms = Array.isArray(lastSmartResult?.searchedFor) && lastSmartResult.searchedFor.length
@@ -588,6 +591,26 @@ export default function JobsPage() {
       toast.success('Jobb sparat i dina ansökningar')
     } catch {
       toast.error('Kunde inte spara jobbet')
+    }
+  }
+
+  async function handleInterviewPrep(jobId: string) {
+    if (interviewPrep[jobId]) return // already loaded — toggle handled in panel
+    setPrepLoading(jobId)
+    try {
+      const res = await fetch('/api/ai/interview-prep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobListingId: jobId }),
+      })
+      const data = await res.json() as InterviewPrepResult & { error?: string }
+      if (!res.ok) throw new Error(data.error)
+      setInterviewPrep((prev) => ({ ...prev, [jobId]: data }))
+      if (data.fallback) toast.info('AI inte tillgänglig — visar generella förberedelsefrågor')
+    } catch {
+      toast.error('Kunde inte generera intervjuförberedelse')
+    } finally {
+      setPrepLoading(null)
     }
   }
 
@@ -1077,6 +1100,9 @@ export default function JobsPage() {
                   {job.match && (
                     <MatchBreakdown match={job.match} jobId={job.id} />
                   )}
+                  {interviewPrep[job.id] && (
+                    <InterviewPrepPanel prep={interviewPrep[job.id]} />
+                  )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {!job.match && (
@@ -1098,6 +1124,15 @@ export default function JobsPage() {
                   >
                     {adaptingId === job.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
                     Anpassa CV
+                  </button>
+                  <button
+                    onClick={() => handleInterviewPrep(job.id)}
+                    disabled={prepLoading === job.id}
+                    title="Generera intervjuförberedelse"
+                    className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:border-violet-200 hover:text-violet-700 disabled:opacity-50"
+                  >
+                    {prepLoading === job.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GraduationCap className="h-3.5 w-3.5" />}
+                    Intervju
                   </button>
                   <button
                     onClick={() => handleSave(job.id)}
@@ -1143,6 +1178,61 @@ function barColor(pct: number) {
 }
 
 type MatchData = NonNullable<JobListing['match']>
+
+function InterviewPrepPanel({ prep }: { prep: InterviewPrepResult }) {
+  const [open, setOpen] = useState(true)
+
+  return (
+    <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 font-semibold text-violet-900">
+          <GraduationCap className="h-4 w-4" />
+          Intervjuförberedelse
+          {prep.fallback && <span className="ml-1 text-xs font-normal text-violet-500">(lokalt utkast)</span>}
+        </span>
+        <button onClick={() => setOpen((v) => !v)} className="text-xs text-violet-500 hover:text-violet-700">
+          {open ? 'Dölj' : 'Visa'}
+        </button>
+      </div>
+
+      {open && (
+        <div className="mt-3 space-y-3">
+          {prep.questions.map((item, i) => (
+            <div key={i} className="rounded-lg bg-white p-3 shadow-sm">
+              <p className="font-medium text-slate-800">{i + 1}. {item.q}</p>
+              {item.tip && (
+                <p className="mt-1.5 text-xs text-slate-500 italic">{item.tip}</p>
+              )}
+            </div>
+          ))}
+
+          <div className="grid gap-2 text-xs sm:grid-cols-3">
+            {prep.salaryTip && (
+              <div className="rounded-lg bg-white p-2.5 shadow-sm">
+                <p className="font-semibold text-slate-700">Lön</p>
+                <p className="mt-0.5 text-slate-500">{prep.salaryTip}</p>
+              </div>
+            )}
+            {prep.cultureNote && (
+              <div className="rounded-lg bg-white p-2.5 shadow-sm">
+                <p className="font-semibold text-slate-700">Kultur</p>
+                <p className="mt-0.5 text-slate-500">{prep.cultureNote}</p>
+              </div>
+            )}
+            {prep.watchOut?.length > 0 && (
+              <div className="rounded-lg bg-amber-50 p-2.5 shadow-sm">
+                <p className="font-semibold text-amber-800">Tänk på</p>
+                <ul className="mt-0.5 space-y-0.5 text-amber-700">
+                  {prep.watchOut.map((w, i) => <li key={i}>• {w}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function MatchBreakdown({ match, jobId }: { match: MatchData; jobId: string }) {
   const [open, setOpen] = useState(false)

@@ -365,3 +365,35 @@ Return a JSON array of companies:
     user: `Find relevant companies for:\nRole: ${targetRole}\nLocation: ${location}\n\nCandidate CV:\n${cvText.slice(0, 3000)}`,
   })
 }
+
+export async function generateInterviewPrep(
+  cvText: string,
+  jobTitle: string,
+  companyName: string,
+  jobDescription: string
+): Promise<string> {
+  return complete({
+    maxTokens: 1536,
+    task: 'interview-prep',
+    languageHint: detectContentLanguage(cvText, jobDescription),
+    system: `Du är en erfaren karriärcoach specialiserad på svenska arbetsmarknaden och intervjuer.
+Skapa ett konkret intervjuförberedelsematerial baserat på jobbannons och kandidatens CV.
+Svara ENBART med JSON:
+{
+  "questions": [
+    { "q": "Intervjufråga på svenska", "tip": "Kort råd om hur kandidaten svarar baserat på CV:t" }
+  ],
+  "salaryTip": "Realistiskt löneintervall för rollen i Sverige (om möjligt specificera stad)",
+  "cultureNote": "Kort om arbetsgivarens kultur, värderingar eller vad de verkar värdesätta baserat på annonsen",
+  "watchOut": ["1-2 saker i annonsen som kan vara utmanande eller som kandidaten bör förbereda sig extra på"]
+}
+Regler:
+- 5-6 frågor, blandning av klassiska och rollspecifika.
+- Frågorna ska vara specifika för DENNA roll och arbetsgivare, inte generiska.
+- Tips ska koppla till kandidatens faktiska CV-innehåll.
+- Inga påhittade erfarenheter — basera tips på vad CV:t faktiskt visar.
+- Lönetipset ska vara realistiskt (Medlingsinstitutet-nivå, inte för högt).
+- Om rollen är LIA/praktik, anpassa frågorna till det.`,
+    user: `Jobb: ${jobTitle} på ${companyName}\n\nJobbannons:\n${jobDescription.slice(0, 3000)}\n\nKandidatens CV:\n${cvText.slice(0, 3000)}`,
+  })
+}

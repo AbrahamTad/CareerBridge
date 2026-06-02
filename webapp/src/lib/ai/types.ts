@@ -45,6 +45,7 @@ export interface CompletionRequest {
     | 'swedish-language-improvement'
     | 'upskilling'
     | 'company-discovery'
+    | 'interview-prep'
 }
 
 export interface ProviderRequest extends CompletionRequest {

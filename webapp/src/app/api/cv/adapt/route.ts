@@ -7,6 +7,7 @@ import { AIProviderError } from '@/lib/ai/types'
 import { cleanCvMarkdown } from '@/lib/cv-export-format'
 import { buildLocalAdaptedCv } from '@/lib/cv/local-adapter'
 import { hasReachedAiLimit } from '@/lib/subscription'
+import { analyzeAts } from '@/lib/ai/ats-scorer'
 
 const CV_GENERATION_UNAVAILABLE_MESSAGE =
   'CV generation is temporarily unavailable. Please try again later.'
@@ -149,7 +150,8 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ content: validation.content, id: saved.id })
+    const ats = analyzeAts(validation.content, jobDescription)
+    return NextResponse.json({ content: validation.content, id: saved.id, ats })
   } catch (err: unknown) {
     if (err instanceof AIProviderError) {
       console.warn('AI CV generation failed; attempting local degraded CV adaptation', {
@@ -180,9 +182,11 @@ export async function POST(request: NextRequest) {
         language: outputLanguage,
       })
 
+      const ats = analyzeAts(localValidation.content, jobDescription)
       return NextResponse.json({
         content: localValidation.content,
         id: saved.id,
+        ats,
         fallback: true,
         degraded: true,
         message: 'AI services are temporarily limited. CareerBridge generated a draft using local intelligence and your uploaded CV.',

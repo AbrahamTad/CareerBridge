@@ -616,17 +616,31 @@ export default function JobsPage() {
 
   async function handleScanPortals() {
     setScanning(true)
-    const timeout = createTimeoutSignal(45000)
+    const timeout = createTimeoutSignal(60000)
     try {
-      const res = await fetch('/api/jobs/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, location, liaOnly }),
-        signal: timeout.signal,
-      })
-      if (!res.ok) throw new Error()
-      const data = await res.json()
-      toast.success(`Skanning klar — ${data.count} nya jobb tillagda (${data.imported ?? data.count} importerade)`)
+      // Run JobTech + company portals in parallel.
+      const [jobtechRes, portalRes] = await Promise.allSettled([
+        fetch('/api/jobs/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, location, liaOnly }),
+          signal: timeout.signal,
+        }),
+        fetch('/api/jobs/portal-scan', { method: 'POST' }),
+      ])
+
+      const jobtechData = jobtechRes.status === 'fulfilled' && jobtechRes.value.ok
+        ? await jobtechRes.value.json() as { count?: number; imported?: number }
+        : null
+
+      const portalData = portalRes.status === 'fulfilled' && portalRes.value.ok
+        ? await portalRes.value.json() as { scanned?: number; newJobs?: number; errors?: number }
+        : null
+
+      const totalNew = (jobtechData?.count ?? 0) + (portalData?.newJobs ?? 0)
+      const portalMsg = portalData ? ` · ${portalData.scanned ?? 0} portaler skannade` : ''
+      toast.success(`Skanning klar — ${totalNew} nya jobb${portalMsg}`)
+
       const params = new URLSearchParams()
       if (query) params.set('q', query)
       if (location) params.set('location', location)

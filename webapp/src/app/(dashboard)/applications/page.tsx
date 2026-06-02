@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
-import { Loader2, Plus, Trash2, ExternalLink, ChevronDown, ChevronUp, CalendarDays, StickyNote } from 'lucide-react'
+import { Loader2, Plus, Trash2, ExternalLink, ChevronDown, ChevronUp, CalendarDays, StickyNote, FileDown } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { APP_STATUS_LABELS, APP_STATUS_COLORS } from '@/types'
 import type { AppStatusType } from '@/types'
@@ -79,6 +79,37 @@ export default function ApplicationsPage() {
     }
   }
 
+  function exportCsv() {
+    if (!apps.length) { toast.error('Inga ansökningar att exportera'); return }
+
+    const headers = ['Företag', 'Roll', 'Status', 'Poäng', 'Skapad', 'Ansökt', 'Intervju', 'Anteckningar', 'URL']
+    const escape = (v: string | null | undefined) => `"${(v ?? '').replace(/"/g, '""')}"`
+
+    const rows = apps.map((a) => [
+      escape(a.companyName),
+      escape(a.jobTitle),
+      escape(APP_STATUS_LABELS[a.status]),
+      a.score != null ? String(a.score.toFixed(1)) : '',
+      escape(a.createdAt?.slice(0, 10)),
+      escape(a.appliedAt?.slice(0, 10)),
+      escape(a.interviewAt?.slice(0, 10)),
+      escape(a.notes),
+      escape(a.jobUrl),
+    ].join(','))
+
+    const csv = '﻿' + [headers.join(','), ...rows].join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `ansokningar-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+    toast.success(`${apps.length} ansökningar exporterade`)
+  }
+
   async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setAdding(true)
@@ -124,13 +155,25 @@ export default function ApplicationsPage() {
           <h1 className="text-2xl font-bold text-slate-900">Ansökningsspårare</h1>
           <p className="mt-1 text-slate-500">{apps.length} totala ansökningar</p>
         </div>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4" />
-          Lägg till
-        </button>
+        <div className="flex items-center gap-2">
+          {apps.length > 0 && (
+            <button
+              onClick={exportCsv}
+              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              title="Exportera som CSV"
+            >
+              <FileDown className="h-4 w-4" />
+              CSV
+            </button>
+          )}
+          <button
+            onClick={() => setShowAdd(!showAdd)}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4" />
+            Lägg till
+          </button>
+        </div>
       </div>
 
       {showAdd && (

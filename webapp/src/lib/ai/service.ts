@@ -366,6 +366,35 @@ Return a JSON array of companies:
   })
 }
 
+export async function generateStarStories(cvText: string): Promise<string> {
+  return complete({
+    maxTokens: 2048,
+    task: 'interview-prep',
+    languageHint: detectContentLanguage(cvText),
+    system: `Du är en intervjucoach. Extrahera 4-6 konkreta STAR-historier från kandidatens CV.
+STAR = Situation, Task (uppgift), Action (åtgärd), Result (resultat).
+Svara ENBART med JSON:
+[
+  {
+    "title": "Kort rubrik för historien (max 8 ord)",
+    "situation": "Kortfattad bakgrund och sammanhang",
+    "task": "Vad var uppgiften eller utmaningen",
+    "action": "Vad kandidaten konkret gjorde",
+    "result": "Mätbart eller tydligt resultat",
+    "tags": ["relevant kompetens", "nyckelord"],
+    "usefulFor": ["Intervjufrågor dessa passar: t.ex. 'Berätta om en utmaning'"]
+  }
+]
+Regler:
+- Använd ENBART information från CV:t. Hitta inga på fakta.
+- Formulera i första person, aktivt och konkret.
+- Om CV:t saknar tydliga resultat, skriv ett trovärdigt antagbart resultat.
+- Inkludera roller från IT, vård/omsorg, och andra sektorer om de finns.
+- Historier ska vara på svenska om CV:t är på svenska.`,
+    user: `Extrahera STAR-historier från detta CV:\n\n${cvText}`,
+  })
+}
+
 export async function generateInterviewPrep(
   cvText: string,
   jobTitle: string,

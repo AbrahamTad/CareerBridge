@@ -10,7 +10,12 @@ import {
   Trash2,
   X,
   Sparkles,
+  BookOpen,
+  Copy,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import type { StarStory } from "@/app/api/ai/star-stories/route";
 import { PageHero } from "@/components/ui/ModernShell";
 
 export default function ProfilePage() {
@@ -47,6 +52,8 @@ export default function ProfilePage() {
   const [showPastePanel, setShowPastePanel] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [starStories, setStarStories] = useState<StarStory[] | null>(null);
+  const [loadingStars, setLoadingStars] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -71,6 +78,21 @@ export default function ProfilePage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  async function handleGenerateStarStories() {
+    setLoadingStars(true);
+    try {
+      const res = await fetch("/api/ai/star-stories", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setStarStories(data.stories);
+      toast.success(`${data.stories.length} STAR-historier skapade`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Kunde inte generera stories");
+    } finally {
+      setLoadingStars(false);
+    }
+  }
 
   async function runAnalysis() {
     setAnalyzing(true);
@@ -629,6 +651,115 @@ export default function ProfilePage() {
           </button>
         </form>
       </div>
+
+      {/* STAR story bank */}
+      {cv && (
+        <div className="rounded-xl border bg-white p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-900 flex items-center gap-2">
+                <BookOpen className="h-4 w-4 text-violet-600" />
+                Intervjustorybank
+              </h2>
+              <p className="mt-0.5 text-sm text-slate-500">
+                STAR-historier från ditt CV — redo att använda i intervjuer och personliga brev
+              </p>
+            </div>
+            <button
+              onClick={handleGenerateStarStories}
+              disabled={loadingStars}
+              className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+            >
+              {loadingStars ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {starStories ? "Generera om" : "Generera stories"}
+            </button>
+          </div>
+
+          {starStories && starStories.length > 0 && (
+            <div className="mt-5 space-y-3">
+              {starStories.map((story, i) => (
+                <StarStoryCard key={i} story={story} />
+              ))}
+            </div>
+          )}
+
+          {starStories && starStories.length === 0 && (
+            <p className="mt-4 text-sm text-slate-400">
+              Inga STAR-historier kunde extraheras. Försök ladda upp ett mer detaljerat CV.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const STAR_LABELS: Record<keyof Pick<StarStory, 'situation' | 'task' | 'action' | 'result'>, string> = {
+  situation: 'Situation',
+  task: 'Uppgift',
+  action: 'Åtgärd',
+  result: 'Resultat',
+};
+
+function StarStoryCard({ story }: { story: StarStory }) {
+  const [open, setOpen] = useState(false);
+
+  const fullText = [
+    `**${story.title}**`,
+    `Situation: ${story.situation}`,
+    `Uppgift: ${story.task}`,
+    `Åtgärd: ${story.action}`,
+    `Resultat: ${story.result}`,
+  ].join('\n\n');
+
+  async function copyStory() {
+    await navigator.clipboard.writeText(fullText);
+    toast.success('Story kopierad');
+  }
+
+  return (
+    <div className="rounded-lg border bg-slate-50 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-slate-900">{story.title}</p>
+          {story.tags?.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {story.tags.map((tag) => (
+                <span key={tag} className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <button onClick={copyStory} className="rounded p-1.5 text-slate-400 hover:text-violet-600" title="Kopiera">
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={() => setOpen((v) => !v)} className="rounded p-1.5 text-slate-400 hover:text-slate-700">
+            {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+          {(['situation', 'task', 'action', 'result'] as const).map((key) => (
+            <div key={key} className="rounded-lg bg-white p-3 shadow-sm">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                {STAR_LABELS[key]}
+              </p>
+              <p className="text-slate-700 leading-snug">{story[key]}</p>
+            </div>
+          ))}
+          {story.usefulFor?.length > 0 && (
+            <div className="col-span-full rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-700">
+              <span className="font-semibold">Passar till: </span>
+              {story.usefulFor.join(' · ')}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

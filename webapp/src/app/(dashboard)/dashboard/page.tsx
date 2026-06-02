@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { AlertTriangle, ArrowRight, BrainCircuit, ClipboardList, Search, TrendingUp } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BrainCircuit, CalendarDays, ClipboardList, Search, TrendingUp } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { APP_STATUS_LABELS, APP_STATUS_COLORS } from '@/types'
 import type { AppStatusType } from '@/types'
@@ -12,14 +12,23 @@ export const metadata = { title: 'Dashboard' }
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  const { dbUser, applicationStats, recentMatches, recentApplications, databaseUnavailable } =
-    user ? await getDashboardData(user.id) : {
-      dbUser: null,
-      applicationStats: [],
-      recentMatches: [],
-      recentApplications: [],
-      databaseUnavailable: false,
-    }
+  const {
+    dbUser,
+    applicationStats,
+    recentMatches,
+    totalMatchCount,
+    recentApplications,
+    upcomingInterviews,
+    databaseUnavailable,
+  } = user ? await getDashboardData(user.id) : {
+    dbUser: null,
+    applicationStats: [],
+    recentMatches: [],
+    totalMatchCount: 0,
+    recentApplications: [],
+    upcomingInterviews: [],
+    databaseUnavailable: false,
+  }
 
   const statsMap = Object.fromEntries(applicationStats.map((s) => [s.status, s._count]))
   const totalApplications = applicationStats.reduce((sum, s) => sum + s._count, 0)
@@ -79,18 +88,68 @@ export default async function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
-          { label: 'Totalt ansökningar', value: totalApplications, icon: ClipboardList, color: 'blue' },
-          { label: 'Intervjuer', value: statsMap['INTERVIEW'] ?? 0, icon: TrendingUp, color: 'purple' },
-          { label: 'Erbjudanden', value: statsMap['OFFER'] ?? 0, icon: TrendingUp, color: 'green' },
-          { label: 'AI-matchningar', value: recentMatches.length, icon: Search, color: 'orange' },
+          { label: 'Totalt ansökningar', value: totalApplications },
+          { label: 'Intervjuer bokade', value: statsMap['INTERVIEW'] ?? 0 },
+          { label: 'Erbjudanden', value: statsMap['OFFER'] ?? 0 },
+          { label: 'Starka matchningar', value: totalMatchCount ?? 0 },
         ].map((stat) => (
           <div key={stat.label} className="rounded-xl border border-white/70 bg-white/80 p-5 shadow-sm backdrop-blur">
-            {/* Metric cards summarize the search pipeline at a glance. */}
             <p className="text-sm font-medium text-slate-500">{stat.label}</p>
             <p className="mt-2 text-3xl font-bold text-slate-900">{stat.value}</p>
           </div>
         ))}
       </div>
+
+      {/* Upcoming interviews + LIA countdown */}
+      {((upcomingInterviews ?? []).length > 0 || (dbUser?.profile?.liaDate1Start)) && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {(upcomingInterviews ?? []).length > 0 && (
+            <div className="rounded-xl border bg-white p-5">
+              <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
+                <CalendarDays className="h-4 w-4 text-amber-500" />
+                Kommande intervjuer
+              </h2>
+              <ul className="space-y-2">
+                {(upcomingInterviews ?? []).map((app) => (
+                  <li key={app.id} className="flex items-center justify-between rounded-lg border bg-amber-50 px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-slate-900">{app.jobTitle}</p>
+                      <p className="text-xs text-slate-500">{app.companyName}</p>
+                    </div>
+                    <span className="ml-3 shrink-0 text-xs font-semibold text-amber-700">
+                      {new Intl.DateTimeFormat('sv-SE', { day: 'numeric', month: 'short' }).format(new Date(app.interviewAt!))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <Link href="/applications" className="mt-3 block text-xs text-blue-600 hover:underline">
+                Hantera ansökningar →
+              </Link>
+            </div>
+          )}
+
+          {dbUser?.profile?.liaDate1Start && (() => {
+            const liaStart = new Date(dbUser.profile!.liaDate1Start!)
+            const daysUntil = Math.max(0, Math.ceil((liaStart.getTime() - Date.now()) / 86400000))
+            const label = dbUser.profile?.liaDate2Start ? 'LIA 1' : 'LIA'
+            return daysUntil > 0 ? (
+              <div className="rounded-xl border border-violet-200 bg-violet-50 p-5">
+                <h2 className="mb-1 flex items-center gap-2 font-semibold text-violet-900">
+                  <BrainCircuit className="h-4 w-4" />
+                  {label} startar om
+                </h2>
+                <p className="text-4xl font-bold text-violet-800">{daysUntil} <span className="text-lg font-medium">dagar</span></p>
+                <p className="mt-1 text-xs text-violet-600">
+                  {liaStart.toLocaleDateString('sv-SE', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+                <Link href="/jobs?lia=1" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline">
+                  Sök LIA-platser <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+            ) : null
+          })()}
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Recent matches */}
@@ -118,13 +177,18 @@ export default async function DashboardPage() {
                     <p className="text-xs text-slate-400">{match.jobListing.company.name}</p>
                   </div>
                   <div className="ml-4 flex items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                      match.score >= 4 ? 'bg-green-100 text-green-700' :
-                      match.score >= 3 ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      {match.score.toFixed(1)}/5
-                    </span>
+                    {(() => {
+                      const pct = Math.round(match.score * 20)
+                      return (
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          pct >= 75 ? 'bg-green-100 text-green-700' :
+                          pct >= 55 ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {pct}/100
+                        </span>
+                      )
+                    })()}
                   </div>
                 </li>
               ))}

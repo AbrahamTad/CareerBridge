@@ -24,7 +24,9 @@ export async function getDashboardData(supabaseUserId: string) {
     }
   }
 
-  const [applicationStats, recentMatches, recentApplications] = await Promise.all([
+  const now = new Date()
+
+  const [applicationStats, recentMatches, totalMatchCount, recentApplications, upcomingInterviews] = await Promise.all([
     safeDbQuery(
       'dashboard.applicationStats',
       () => prisma.application.groupBy({
@@ -37,12 +39,17 @@ export async function getDashboardData(supabaseUserId: string) {
     safeDbQuery(
       'dashboard.recentMatches',
       () => prisma.jobMatch.findMany({
-        where: { userId },
+        where: { userId, score: { gte: 2.75 } },
         include: { jobListing: { include: { company: true } } },
         orderBy: { score: 'desc' },
         take: 5,
       }),
       []
+    ),
+    safeDbQuery(
+      'dashboard.totalMatchCount',
+      () => prisma.jobMatch.count({ where: { userId, score: { gte: 2.75 } } }),
+      0
     ),
     safeDbQuery(
       'dashboard.recentApplications',
@@ -53,13 +60,25 @@ export async function getDashboardData(supabaseUserId: string) {
       }),
       []
     ),
+    safeDbQuery(
+      'dashboard.upcomingInterviews',
+      () => prisma.application.findMany({
+        where: { userId, interviewAt: { gte: now } },
+        orderBy: { interviewAt: 'asc' },
+        take: 4,
+      }),
+      []
+    ),
   ])
 
   return {
     dbUser: dbUserResult.data,
     applicationStats: applicationStats.data,
     recentMatches: recentMatches.data,
+    totalMatchCount: totalMatchCount.data,
     recentApplications: recentApplications.data,
-    databaseUnavailable: !dbUserResult.ok || !applicationStats.ok || !recentMatches.ok || !recentApplications.ok,
+    upcomingInterviews: upcomingInterviews.data,
+    databaseUnavailable:
+      !dbUserResult.ok || !applicationStats.ok || !recentMatches.ok || !recentApplications.ok,
   }
 }

@@ -12,6 +12,7 @@ import {
   getFriendlyAIError,
 } from '@/lib/ai/service'
 import { hasReachedAiLimit } from '@/lib/subscription'
+import { analyzeAts } from '@/lib/ai/ats-scorer'
 
 type DocumentType = 'cover-letter' | 'lia-praktik-letter' | 'email-application'
 
@@ -106,7 +107,8 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ content, id: saved.id })
+    const ats = analyzeAts(content, jobDescription)
+    return NextResponse.json({ content, id: saved.id, ats })
   } catch (err: unknown) {
     if (canUseLocalAIFallback(err)) {
       const content = buildLocalCoverLetter(jobTitle, companyName, jobDescription, language, documentType)
@@ -122,9 +124,11 @@ export async function POST(request: NextRequest) {
         },
       })
 
+      const ats = analyzeAts(content, jobDescription)
       return NextResponse.json({
         content,
         id: saved.id,
+        ats,
         fallback: true,
         message: 'AI services are temporarily limited. CareerBridge generated a draft from your job details.',
       })

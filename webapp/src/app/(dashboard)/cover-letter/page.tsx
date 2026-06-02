@@ -11,6 +11,8 @@ import {
   exportCleanPdf,
   markdownToPlainText,
 } from '@/lib/document-actions'
+import { AtsScorecardPanel } from '@/components/cv/AtsScorecardPanel'
+import type { AtsScore } from '@/lib/ai/ats-scorer'
 
 export default function CoverLetterPage() {
   const [documentType, setDocumentType] = useState<'cover-letter' | 'lia-praktik-letter' | 'email-application'>('cover-letter')
@@ -21,6 +23,7 @@ export default function CoverLetterPage() {
   const [tone, setTone] = useState('professional')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<string | null>(null)
+  const [ats, setAts] = useState<AtsScore | null>(null)
   const [editingResult, setEditingResult] = useState(false)
 
   async function handleGenerate(e: React.FormEvent) {
@@ -36,6 +39,7 @@ export default function CoverLetterPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setResult(data.content)
+      setAts(data.ats ?? null)
       setEditingResult(false)
       toast.success('Ansökningstext genererad!')
     } catch (err: unknown) {
@@ -165,6 +169,11 @@ export default function CoverLetterPage() {
                   <li>• Finns inget påhittat om erfarenhet, datum eller utbildning?</li>
                   <li>• Kontrollera sista ansökningsdag och exakt ansökningssätt i jobbannonsen.</li>
                 </ul>
+              </div>
+              {ats && <AtsScorecardPanel ats={ats} />}
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span>{markdownToPlainText(result).split(/\s+/).filter(Boolean).length} ord</span>
+                <span>{markdownToPlainText(result).length} tecken</span>
               </div>
               {editingResult ? (
                 <textarea

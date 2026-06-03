@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
   })
 }
 
-import { analyzeAndSaveJobMatch } from '@/lib/ai/aiMatchingService'
+import { analyzeAndSaveJobMatch, buildDeterministicMatch, saveJobMatch } from '@/lib/ai/aiMatchingService'
 import { generateJobSearchQueries, getCvText, getFriendlyAIError } from '@/lib/ai/service'
 import type { ExternalJob } from '@/lib/jobs/jobtech'
 import { expandJobSearchLocations, locationLabelForSearch } from '@/lib/jobs/locations'
@@ -317,31 +317,59 @@ export async function POST(request: NextRequest) {
     where: { userId: auth.dbUserId, jobListingId: { in: jobIds } },
     select: { jobListingId: true, score: true },
   })
-  const matchedIds = new Set(existingMatches.map((match) => match.jobListingId))
-  const toMatch = jobIds.filter((jobId) => !matchedIds.has(jobId)).slice(0, MAX_AUTO_MATCHES)
-  let matchedCount = existingMatches.filter((match) => match.score >= 2.75).length
+  const alreadyMatchedIds = new Set(existingMatches.map((m) => m.jobListingId))
+  const unscoredIds = jobIds.filter((id) => !alreadyMatchedIds.has(id))
 
-  await Promise.allSettled(
-    toMatch.map(async (jobId) => {
-      const jobListing = await prisma.jobListing.findUnique({
-        where: { id: jobId },
+  // Step 1: run the fast deterministic scorer on ALL unscored jobs so every imported
+  // job gets a score — not just the first MAX_AUTO_MATCHES.
+  const unscoredListings = unscoredIds.length
+    ? await prisma.jobListing.findMany({
+        where: { id: { in: unscoredIds } },
         include: { company: true },
       })
-      if (!jobListing?.description) return
+    : []
 
+  const deterministicScores = new Map<string, number>()
+  await Promise.allSettled(
+    unscoredListings.map(async (listing) => {
+      if (!listing.description) return
+      const det = buildDeterministicMatch(cv, listing)
+      deterministicScores.set(listing.id, det.score)
+      if (det.score < 2.0) return // skip saving clearly irrelevant jobs
+      await saveJobMatch(auth.dbUserId, cv.id, listing.id, det)
+    })
+  )
+
+  // Step 2: AI-score only the top deterministic candidates to get richer reasoning.
+  const topForAI = unscoredListings
+    .filter((l) => (deterministicScores.get(l.id) ?? 0) >= 2.5)
+    .sort((a, b) => (deterministicScores.get(b.id) ?? 0) - (deterministicScores.get(a.id) ?? 0))
+    .slice(0, MAX_AUTO_MATCHES)
+
+  let matchedCount = existingMatches.filter((m) => m.score >= 2.75).length
+
+  await Promise.allSettled(
+    topForAI.map(async (jobListing) => {
+      if (!jobListing.description) return
       try {
         const match = await analyzeAndSaveJobMatch(auth.dbUserId, cv, jobListing)
         if (match.score >= 2.75) matchedCount++
       } catch {
-        // A failed AI match should still return the saved job as a partial result.
+        // Deterministic score already saved — AI failure is a non-fatal degradation.
+        if ((deterministicScores.get(jobListing.id) ?? 0) >= 2.75) matchedCount++
       }
     })
   )
 
-  if (subscription && toMatch.length > 0) {
+  // Count deterministic-only passes as matches too
+  for (const [id, score] of deterministicScores) {
+    if (score >= 2.75 && !topForAI.find((l) => l.id === id)) matchedCount++
+  }
+
+  if (subscription && topForAI.length > 0) {
     await prisma.subscription.update({
       where: { userId: auth.dbUserId },
-      data: { aiCallsThisMonth: { increment: toMatch.length } },
+      data: { aiCallsThisMonth: { increment: topForAI.length } },
     })
   }
 
@@ -349,7 +377,7 @@ export async function POST(request: NextRequest) {
     where: {
       userId: auth.dbUserId,
       jobListingId: { in: jobIds },
-      score: { gte: 2.75 },
+      score: { gte: 2.5 },
     },
     select: { jobListingId: true },
   })

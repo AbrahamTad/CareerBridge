@@ -230,6 +230,38 @@ export default function JobsPage() {
   const [liaPeriods, setLiaPeriods] = useState<LiaPeriod[]>([])
   const [interviewPrep, setInterviewPrep] = useState<Record<string, InterviewPrepResult>>({})
   const [prepLoading, setPrepLoading] = useState<string | null>(null)
+
+  const SAVED_SEARCHES_KEY = 'cb_saved_searches'
+  type SavedSearch = { id: string; label: string; query: string; location: string; liaOnly: boolean }
+
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(() => {
+    try { return JSON.parse(localStorage.getItem(SAVED_SEARCHES_KEY) ?? '[]') } catch { return [] }
+  })
+
+  function persistSearches(list: SavedSearch[]) {
+    setSavedSearches(list)
+    try { localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(list)) } catch {}
+  }
+
+  function handleSaveSearch() {
+    if (!query && !liaOnly) { toast.error('Ange en sökterm att spara'); return }
+    const label = [query, liaOnly ? 'LIA' : '', location].filter(Boolean).join(' · ')
+    const id = Date.now().toString()
+    const updated = [...savedSearches, { id, label, query, location, liaOnly }].slice(-8)
+    persistSearches(updated)
+    toast.success(`Sökning sparad: "${label}"`)
+  }
+
+  function handleRunSavedSearch(s: SavedSearch) {
+    setQuery(s.query)
+    setLocation(s.location)
+    setLiaOnly(s.liaOnly)
+    setTimeout(() => handleSmartSearch(), 50)
+  }
+
+  function handleDeleteSavedSearch(id: string) {
+    persistSearches(savedSearches.filter((s) => s.id !== id))
+  }
   const activeSearch = useRef<AbortController | null>(null)
   const autoSourceScanDone = useRef(false)
   const lastSearchTerms = Array.isArray(lastSmartResult?.searchedFor) && lastSmartResult.searchedFor.length
@@ -874,6 +906,14 @@ export default function JobsPage() {
             <Filter className="h-4 w-4" />
             Filtrera
           </button>
+          <button
+            type="button"
+            onClick={handleSaveSearch}
+            title="Spara sökning som genväg"
+            className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50"
+          >
+            <BookmarkPlus className="h-4 w-4" />
+          </button>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
           <span>Område:</span>
@@ -939,6 +979,20 @@ export default function JobsPage() {
             </button>
           ))}
         </div>
+
+        {savedSearches.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5 border-t pt-2">
+            <span className="text-xs text-slate-400 self-center">Sparade:</span>
+            {savedSearches.map((s) => (
+              <span key={s.id} className="flex items-center gap-0.5 rounded-full border border-blue-100 bg-blue-50 text-xs font-medium text-blue-800">
+                <button onClick={() => handleRunSavedSearch(s)} className="pl-2.5 pr-1 py-1 hover:text-blue-600">
+                  {s.label}
+                </button>
+                <button onClick={() => handleDeleteSavedSearch(s.id)} className="pr-2 py-1 text-blue-400 hover:text-red-500">×</button>
+              </span>
+            ))}
+          </div>
+        )}
       </form>
 
       {smartSearching && (

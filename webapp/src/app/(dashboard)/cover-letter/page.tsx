@@ -1,9 +1,9 @@
 'use client'
 
 // User-facing editor for AI-generated letters and short application emails.
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Mail, Loader2, Copy, RotateCcw, Download } from 'lucide-react'
+import { Mail, Loader2, Copy, RotateCcw, Download, Zap } from 'lucide-react'
 import {
   copyCleanText,
   downloadCleanText,
@@ -13,6 +13,14 @@ import {
 } from '@/lib/document-actions'
 import { AtsScorecardPanel } from '@/components/cv/AtsScorecardPanel'
 import type { AtsScore } from '@/lib/ai/ats-scorer'
+
+interface SavedJob {
+  id: string
+  title: string
+  description: string
+  company: { name: string }
+  isLia: boolean
+}
 
 export default function CoverLetterPage() {
   const [documentType, setDocumentType] = useState<'cover-letter' | 'lia-praktik-letter' | 'email-application'>('cover-letter')
@@ -25,6 +33,28 @@ export default function CoverLetterPage() {
   const [result, setResult] = useState<string | null>(null)
   const [ats, setAts] = useState<AtsScore | null>(null)
   const [editingResult, setEditingResult] = useState(false)
+  const [savedJobs, setSavedJobs] = useState<SavedJob[]>([])
+
+  useEffect(() => {
+    fetch('/api/jobs?minMatch=55')
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data?.jobs) setSavedJobs(data.jobs.slice(0, 20))
+      })
+      .catch(() => {})
+  }, [])
+
+  function handlePickJob(jobId: string) {
+    const job = savedJobs.find((j) => j.id === jobId)
+    if (!job) return
+    setJobTitle(job.title)
+    setCompanyName(job.company.name)
+    setJobDescription(job.description.slice(0, 8000))
+    if (job.isLia) setDocumentType('lia-praktik-letter')
+    setResult(null)
+    setAts(null)
+    toast.success(`Fyllt i från: ${job.title} — ${job.company.name}`)
+  }
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault()
@@ -87,6 +117,26 @@ export default function CoverLetterPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border bg-white p-6">
+          {savedJobs.length > 0 && (
+            <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 p-3">
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-blue-800">
+                <Zap className="h-3.5 w-3.5" />
+                Fyll i från ett matchat jobb
+              </label>
+              <select
+                defaultValue=""
+                onChange={(e) => handlePickJob(e.target.value)}
+                className="w-full rounded-lg border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              >
+                <option value="" disabled>Välj ett jobb...</option>
+                {savedJobs.map((job) => (
+                  <option key={job.id} value={job.id}>
+                    {job.title} — {job.company.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <form onSubmit={handleGenerate} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Typ av ansökningstext</label>

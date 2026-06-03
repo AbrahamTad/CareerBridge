@@ -69,15 +69,23 @@ const SKILLS = [
 ]
 
 const IT_TERMS = [
-  'frontend', 'front-end', 'web developer', 'webbutvecklare', 'utvecklare', 'developer',
-  'react', 'javascript', 'typescript', 'qa', 'testare', 'it support', 'supporttekniker',
-  'programmer', 'software', 'fullstack', 'backend',
+  'frontend', 'front-end', 'web developer', 'webbutvecklare', 'webbprogrammerare',
+  'webb- och applikationsutvecklare', 'webb och app',
+  'utvecklare', 'developer', 'engineer',
+  'react', 'javascript', 'typescript', 'python', 'java',
+  'qa', 'testare', 'it support', 'supporttekniker',
+  'programmer', 'software', 'fullstack', 'backend', 'systemutvecklare',
+  'mjukvaruutvecklare', 'applikationsutvecklare',
+  'devops', 'cloud', 'platform', 'ux', 'ui designer',
 ]
 
 const HEALTHCARE_TERMS = [
   'sjukskoterska', 'underskoterska', 'vard', 'omsorg', 'hemtjanst', 'lss',
   'personlig assistent', 'boendestod', 'vardbitrade', 'stodassistent',
   'aldreomsorg', 'funktionsstod', 'bmss', 'lakare', 'nurse',
+  'omsorgsassistent', 'vardpersonal', 'boende', 'gruppboende', 'serviceboende',
+  'daglig verksamhet', 'korttidsboende', 'socialpedagog', 'behandlingsassistent',
+  'omvardnad', 'medicinsk',
 ]
 
 const LOGISTICS_TERMS = ['truckforare', 'chauffor', 'lager', 'warehouse', 'driver', 'transport']
@@ -87,11 +95,94 @@ const EDUCATION_TERMS = ['larare', 'forskola', 'elevassistent', 'pedagog', 'teac
 const LICENSE_TERMS = ['legitimation', 'sjukskoterskelegitimation', 'korkort', 'truckkort', 'yrkesbevis']
 
 const SYNONYM_GROUPS = [
-  ['frontendutvecklare', 'frontend developer', 'frontend', 'front-end', 'webbutvecklare', 'react developer', 'javascript developer', 'ui developer'],
-  ['underskoterska', 'vardbitrade', 'stodassistent', 'aldreomsorg', 'funktionsstod', 'bmss', 'lss', 'omvardnad', 'hemtjanst'],
-  ['qa', 'testare', 'quality assurance', 'test automation', 'mjukvarutestare'],
-  ['it support', 'servicedesk', 'helpdesk', 'supporttekniker', 'it-tekniker'],
-  ['lia', 'praktik', 'internship', 'trainee'],
+  // Frontend / Web development
+  [
+    'frontendutvecklare', 'frontend developer', 'frontend', 'front-end',
+    'webbutvecklare', 'webbprogrammerare', 'webb- och applikationsutvecklare',
+    'react developer', 'javascript developer', 'typescript developer',
+    'ui developer', 'ui-utvecklare', 'webb och app', 'webbdesigner',
+  ],
+  // Backend / Systems
+  [
+    'backendutvecklare', 'backend developer', 'backend',
+    'systemutvecklare', 'system developer', 'systems developer',
+    'mjukvaruutvecklare', 'software developer', 'software engineer',
+    'applikationsutvecklare', 'programmerare', 'programmer', 'utvecklare',
+  ],
+  // Full stack
+  [
+    'fullstackutvecklare', 'fullstack developer', 'full stack', 'fullstack', 'full-stack',
+    'webb- och systemutvecklare',
+  ],
+  // QA / Test
+  [
+    'qa', 'qa engineer', 'quality assurance', 'testare', 'mjukvarutestare',
+    'test automation', 'testingenjor', 'testspecialist', 'qa-testare',
+    'systemtestare', 'acceptanstestare', 'verifieringsingenjor',
+  ],
+  // IT support / Servicedesk
+  [
+    'it support', 'it-support', 'servicedesk', 'service desk', 'helpdesk',
+    'supporttekniker', 'it-tekniker', 'drifttekniker', 'it-drifttekniker',
+    'teknisk support', 'first line support', 'second line support',
+  ],
+  // Undersköterska / Vård
+  [
+    'underskoterska', 'undersköterska', 'vardbitrade', 'vardbirade',
+    'aldreomsorg', 'aldreomsorgsassistent', 'omsorgsassistent',
+    'omvardnad', 'hemtjanst', 'hemtjanstpersonal',
+    'vardpersonal', 'vard och omsorg', 'vard- och omsorgspersonal',
+    'medicinsk personal', 'akutvard',
+  ],
+  // LSS / Funktionsstöd / Stödassistent
+  [
+    'stodassistent', 'stödassistent', 'lss', 'lss-assistent',
+    'funktionsstod', 'funktionsstöd', 'funktionsstödsassistent',
+    'boendestod', 'boendestödjare', 'boendestöd',
+    'bmss', 'personlig assistent', 'avlosare', 'ledsagare',
+    'omsorgsassistent lss', 'daglig verksamhet', 'gruppboende',
+    'serviceboende', 'korttidsboende', 'socialpedagog',
+  ],
+  // Sjuksköterska
+  [
+    'sjukskoterska', 'sjuksköterska', 'nurse', 'registered nurse',
+    'legitimerad sjukskoterska', 'distriktsskoterska', 'operationsskoterska',
+  ],
+  // Socionom / Social work
+  [
+    'socionom', 'socialsekreterare', 'biståndshandlaggere', 'biståndshandläggare',
+    'kurator', 'socialt arbete', 'familjeterapeut', 'behandlingsassistent',
+  ],
+  // Teacher / Education
+  [
+    'larare', 'lärare', 'grundskollärare', 'gymnasielärare', 'ämneslärare',
+    'yrkeslärare', 'sfi-larare', 'modersmålslärare', 'speciallarare',
+    'specialpedagog', 'pedagog',
+  ],
+  // Förskollärare / Barnskötare
+  [
+    'forskollarare', 'förskollärare', 'forskolataren', 'barnskotare', 'barnskötare',
+    'forskola', 'fritidspedagog',
+  ],
+  // LIA / Internship
+  [
+    'lia', 'lärande i arbete', 'larande i arbete',
+    'praktik', 'praktikplats', 'praktikant',
+    'internship', 'intern', 'trainee', 'larling',
+    'yh-student', 'yrkeshogskola',
+  ],
+  // DevOps / Cloud / Platform
+  [
+    'devops', 'devops engineer', 'cloud engineer', 'platform engineer',
+    'site reliability', 'sre', 'infrastrukturingenjor', 'molningenjor',
+    'driftsansvarig', 'driftsingenjor',
+  ],
+  // UX / Design
+  [
+    'ux', 'ux designer', 'ux-designer', 'ui designer', 'ui-designer',
+    'interaktionsdesigner', 'product designer', 'produktdesigner',
+    'ux/ui', 'user experience', 'usability',
+  ],
 ]
 
 function normalize(text: string) {

@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Sparkles, Loader2, Download, Copy, RotateCcw } from 'lucide-react'
+import { Sparkles, Loader2, Download, Copy, RotateCcw, Zap } from 'lucide-react'
 import CvDocumentPreview from '@/components/cv/CvDocumentPreview'
 import {
   copyCleanText,
@@ -23,6 +23,13 @@ type GenerateResult = {
   message?: string
 }
 
+interface SavedJob {
+  id: string
+  title: string
+  description: string
+  company: { name: string }
+}
+
 export default function CVBuilderPage() {
   const [jobTitle, setJobTitle] = useState('')
   const [companyName, setCompanyName] = useState('')
@@ -32,6 +39,25 @@ export default function CVBuilderPage() {
   const [result, setResult] = useState<GenerateResult | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [editingResult, setEditingResult] = useState(false)
+  const [savedJobs, setSavedJobs] = useState<SavedJob[]>([])
+
+  useEffect(() => {
+    fetch('/api/jobs?minMatch=55')
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => { if (data?.jobs) setSavedJobs(data.jobs.slice(0, 20)) })
+      .catch(() => {})
+  }, [])
+
+  function handlePickJob(jobId: string) {
+    const job = savedJobs.find((j) => j.id === jobId)
+    if (!job) return
+    setJobTitle(job.title)
+    setCompanyName(job.company.name)
+    setJobDescription(job.description.slice(0, 8000))
+    setResult(null)
+    setErrorMessage(null)
+    toast.success(`Fyllt i från: ${job.title} — ${job.company.name}`)
+  }
 
   async function runGenerate() {
     setLoading(true)
@@ -109,6 +135,26 @@ export default function CVBuilderPage() {
         {/* Input form */}
         <div className="rounded-xl border bg-white p-6">
           <h2 className="mb-5 font-semibold text-slate-900">Jobbinformation</h2>
+          {savedJobs.length > 0 && (
+            <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 p-3">
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-blue-800">
+                <Zap className="h-3.5 w-3.5" />
+                Fyll i från ett matchat jobb
+              </label>
+              <select
+                defaultValue=""
+                onChange={(e) => handlePickJob(e.target.value)}
+                className="w-full rounded-lg border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              >
+                <option value="" disabled>Välj ett jobb...</option>
+                {savedJobs.map((job) => (
+                  <option key={job.id} value={job.id}>
+                    {job.title} — {job.company.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <form onSubmit={handleGenerate} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Jobbtitel</label>

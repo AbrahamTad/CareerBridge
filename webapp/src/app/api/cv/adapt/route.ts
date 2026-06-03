@@ -109,6 +109,9 @@ export async function POST(request: NextRequest) {
   if (!jobTitle || !companyName || !jobDescription) {
     return NextResponse.json({ error: 'jobTitle, companyName och jobDescription krävs' }, { status: 400 })
   }
+  if (typeof jobDescription === 'string' && jobDescription.length > 15_000) {
+    return NextResponse.json({ error: 'Jobbannonsens text är för lång (max 15 000 tecken).' }, { status: 400 })
+  }
 
   const cv = await prisma.cV.findFirst({ where: { userId: auth.dbUserId, isActive: true } })
   if (!cv) return NextResponse.json({ error: 'Inget CV hittat' }, { status: 400 })

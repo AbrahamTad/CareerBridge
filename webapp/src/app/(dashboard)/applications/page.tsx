@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
-import { Loader2, Plus, Trash2, ExternalLink, ChevronDown, ChevronUp, CalendarDays, StickyNote, FileDown } from 'lucide-react'
+import { Loader2, Plus, Trash2, ExternalLink, ChevronDown, ChevronUp, CalendarDays, StickyNote, FileDown, Bell } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { APP_STATUS_LABELS, APP_STATUS_COLORS } from '@/types'
 import type { AppStatusType } from '@/types'
@@ -22,6 +22,22 @@ interface Application {
 }
 
 const ALL_STATUSES = ['SAVED', 'APPLIED', 'RESPONDED', 'INTERVIEW', 'OFFER', 'REJECTED', 'DISCARDED'] as AppStatusType[]
+
+const FOLLOWUP_DAYS = 14
+
+function daysSince(isoDate?: string | null): number | null {
+  if (!isoDate) return null
+  return Math.floor((Date.now() - new Date(isoDate).getTime()) / 86_400_000)
+}
+
+function needsFollowUp(app: { status: AppStatusType; appliedAt?: string | null; notes?: string | null }): boolean {
+  if (app.status !== 'APPLIED') return false
+  const days = daysSince(app.appliedAt)
+  if (days === null || days < FOLLOWUP_DAYS) return false
+  // Don't nudge again if notes already mention a recent follow-up
+  if (app.notes?.toLowerCase().includes('uppföljning')) return false
+  return true
+}
 
 function toDateInputValue(iso?: string | null) {
   if (!iso) return ''
@@ -76,6 +92,21 @@ export default function ApplicationsPage() {
       if (expandedId === id) setExpandedId(null)
       setDeleteId(null)
       toast.success('Ansökan borttagen')
+    }
+  }
+
+  async function handleFollowUp(id: string) {
+    const today = new Date().toISOString().slice(0, 10)
+    const app = apps.find((a) => a.id === id)
+    const existing = app?.notes?.trim() ?? ''
+    const updated = existing
+      ? `${existing}\n\nUppföljning skickad ${today}`
+      : `Uppföljning skickad ${today}`
+    try {
+      await patch(id, { notes: updated })
+      toast.success('Uppföljning noterad i anteckningar')
+    } catch {
+      toast.error('Kunde inte spara uppföljning')
     }
   }
 
@@ -191,6 +222,19 @@ export default function ApplicationsPage() {
         </div>
       )}
 
+      {/* Follow-up nudge banner */}
+      {(() => {
+        const count = apps.filter(needsFollowUp).length
+        return count > 0 ? (
+          <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+            <Bell className="h-4 w-4 shrink-0 text-amber-600" />
+            <p className="text-amber-900">
+              <span className="font-semibold">{count} ansökning{count > 1 ? 'ar' : ''}</span> väntar på svar i {FOLLOWUP_DAYS}+ dagar — dags att följa upp?
+            </p>
+          </div>
+        ) : null
+      })()}
+
       <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setFilter('ALL')}
@@ -237,15 +281,27 @@ export default function ApplicationsPage() {
                     <td className="px-4 py-3 font-medium text-slate-900">{app.companyName}</td>
                     <td className="px-4 py-3 text-slate-600">{app.jobTitle}</td>
                     <td className="px-4 py-3">
-                      <select
-                        value={app.status}
-                        onChange={(e) => handleStatusChange(app.id, e.target.value as AppStatusType)}
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium border-0 cursor-pointer ${APP_STATUS_COLORS[app.status]}`}
-                      >
-                        {ALL_STATUSES.map((s) => (
-                          <option key={s} value={s}>{APP_STATUS_LABELS[s]}</option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <select
+                          value={app.status}
+                          onChange={(e) => handleStatusChange(app.id, e.target.value as AppStatusType)}
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium border-0 cursor-pointer ${APP_STATUS_COLORS[app.status]}`}
+                        >
+                          {ALL_STATUSES.map((s) => (
+                            <option key={s} value={s}>{APP_STATUS_LABELS[s]}</option>
+                          ))}
+                        </select>
+                        {needsFollowUp(app) && (
+                          <button
+                            onClick={() => handleFollowUp(app.id)}
+                            className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 hover:bg-amber-200"
+                            title={`${daysSince(app.appliedAt)} dagar sedan ansökan`}
+                          >
+                            <Bell className="h-3 w-3" />
+                            Följ upp
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-slate-400 hidden md:table-cell">
                       {app.interviewAt ? (

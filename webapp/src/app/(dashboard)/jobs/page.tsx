@@ -398,6 +398,31 @@ export default function JobsPage() {
     if (count === 0 && defaultValues.query) {
       await autoScanIfEmpty(defaultValues)
     }
+    // Kick off a background portal scan on first load if stale — no await.
+    backgroundPortalScan()
+  }
+
+  const PORTAL_SCAN_STALE_MS = 4 * 60 * 60 * 1000 // 4 hours
+  const PORTAL_SCAN_KEY = 'cb_last_portal_scan'
+
+  function isPortalScanStale(): boolean {
+    try {
+      const last = localStorage.getItem(PORTAL_SCAN_KEY)
+      if (!last) return true
+      return Date.now() - Number(last) > PORTAL_SCAN_STALE_MS
+    } catch {
+      return true
+    }
+  }
+
+  function markPortalScanned() {
+    try { localStorage.setItem(PORTAL_SCAN_KEY, String(Date.now())) } catch {}
+  }
+
+  function backgroundPortalScan() {
+    if (!isPortalScanStale()) return
+    markPortalScanned()
+    fetch('/api/jobs/portal-scan', { method: 'POST' }).catch(() => {})
   }
 
   async function handleSmartSearch(options?: { deeper?: boolean }) {
@@ -423,6 +448,8 @@ export default function JobsPage() {
         setGraphSkills(result.searchedFor)
       }
       toast.success(`Hittade ${result.totalFound} jobb, importerade ${result.imported ?? result.newJobs}`)
+      // Silently refresh company portal jobs if they haven't been scanned recently.
+      backgroundPortalScan()
       const params = new URLSearchParams()
       // Load the exact imported jobs first so active filters do not hide fresh AI results.
       if (Array.isArray(result.jobIds) && result.jobIds.length > 0) {

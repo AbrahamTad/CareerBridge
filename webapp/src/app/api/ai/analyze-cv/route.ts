@@ -107,8 +107,14 @@ function localAnalyzeCV(rawText: string): Prisma.InputJsonObject {
   }
 }
 
+export interface AnalysisSyncSummary {
+  skills: number
+  targetRoles: number
+  liaEnabled: boolean
+}
+
 // Store analysis on the CV and synchronize reusable profile fields for later searches.
-async function saveAnalysis(userId: string, cvId: string, parsedData: Prisma.InputJsonObject) {
+async function saveAnalysis(userId: string, cvId: string, parsedData: Prisma.InputJsonObject): Promise<AnalysisSyncSummary> {
   await prisma.cV.update({
     where: { id: cvId },
     data: { parsedData },
@@ -119,6 +125,7 @@ async function saveAnalysis(userId: string, cvId: string, parsedData: Prisma.Inp
   const spokenLanguages = Array.isArray(parsedData.spokenLanguages)
     ? parsedData.spokenLanguages.filter((language): language is string => typeof language === 'string')
     : []
+  const liaEnabled = parsedData.isLIAEligible === true || parsedData.liaEnabled === true
 
   if (skills.length || targetRoles.length || spokenLanguages.length) {
     await prisma.userProfile.upsert({
@@ -128,14 +135,18 @@ async function saveAnalysis(userId: string, cvId: string, parsedData: Prisma.Inp
         skills,
         targetRoles,
         spokenLanguages,
+        liaEnabled,
       },
       update: {
         skills: skills.length ? skills : undefined,
         targetRoles: targetRoles.length ? targetRoles : undefined,
         spokenLanguages: spokenLanguages.length ? spokenLanguages : undefined,
+        liaEnabled,
       },
     })
   }
+
+  return { skills: skills.length, targetRoles: targetRoles.length, liaEnabled }
 }
 
 export async function POST() {
@@ -167,7 +178,7 @@ export async function POST() {
       parsedData = { raw: cleaned, parseError: true }
     }
 
-    await saveAnalysis(auth.dbUserId, cv.id, parsedData)
+    const synced = await saveAnalysis(auth.dbUserId, cv.id, parsedData)
 
     if (subscription) {
       await prisma.subscription.update({
@@ -176,18 +187,14 @@ export async function POST() {
       })
     }
 
-    return NextResponse.json({ analysis: parsedData })
+    return NextResponse.json({ analysis: parsedData, synced })
   } catch (err: unknown) {
     const { message, status } = getFriendlyAIError(err, 'AI-analys misslyckades')
     console.warn('AI CV analysis failed; using local fallback', { message, status })
 
     const parsedData = localAnalyzeCV(cv.rawText)
-    await saveAnalysis(auth.dbUserId, cv.id, parsedData)
+    const synced = await saveAnalysis(auth.dbUserId, cv.id, parsedData)
 
-    return NextResponse.json({
-      analysis: parsedData,
-      warning: message,
-      fallback: true,
-    })
+    return NextResponse.json({ analysis: parsedData, synced, warning: message, fallback: true })
   }
 }

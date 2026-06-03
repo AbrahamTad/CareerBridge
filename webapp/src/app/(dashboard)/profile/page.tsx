@@ -102,7 +102,17 @@ export default function ProfilePage() {
     try {
       const analyzeRes = await fetch("/api/ai/analyze-cv", { method: "POST" });
       if (analyzeRes.ok) {
-        toast.success("CV analyserat av AI");
+        const data = await analyzeRes.json().catch(() => ({}));
+        const synced = data.synced as { skills?: number; targetRoles?: number; liaEnabled?: boolean } | undefined;
+        const parts: string[] = [];
+        if (synced?.skills) parts.push(`${synced.skills} kompetenser`);
+        if (synced?.targetRoles) parts.push(`${synced.targetRoles} målroller`);
+        if (synced?.liaEnabled) parts.push('LIA aktiverat');
+        const msg = parts.length
+          ? `CV analyserat — synkroniserade: ${parts.join(', ')}`
+          : data.fallback ? 'CV analyserat (lokal analys)' : 'CV analyserat av AI';
+        toast.success(msg);
+        await loadData();
       } else {
         const errData = await analyzeRes.json().catch(() => ({}));
         toast.error(errData.error ?? "AI-analys misslyckades");
@@ -470,8 +480,8 @@ export default function ProfilePage() {
       {/* CV Analysis Results */}
       {cv?.parsedData && <CvAnalysisCard parsedData={cv.parsedData as Record<string, unknown>} onReanalyze={runAnalysis} analyzing={analyzing} />}
 
-      {/* Profile Form */}
-      <div className="rounded-xl border border-white/70 bg-white/80 p-6 shadow-sm backdrop-blur">
+      {/* Profile Form — key forces remount after analysis so defaultValue reflects synced data */}
+      <div key={profile?.skills?.join(',') ?? 'empty'} className="rounded-xl border border-white/70 bg-white/80 p-6 shadow-sm backdrop-blur">
         {/* Profile fields feed the matching model with location, LIA, and skill context. */}
         <h2 className="mb-6 text-lg font-semibold text-slate-900">
           Profilinformation

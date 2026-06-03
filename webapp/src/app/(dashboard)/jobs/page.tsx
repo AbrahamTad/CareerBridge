@@ -16,7 +16,14 @@ import {
   exportCleanPdf,
 } from '@/lib/document-actions'
 import { cleanCvMarkdown } from '@/lib/cv-export-format'
-import type { InterviewPrepResult } from '@/app/api/ai/interview-prep/route'
+// Defined inline to avoid importing server-only route modules in a client component.
+interface InterviewPrepResult {
+  questions: { q: string; tip: string }[]
+  salaryTip: string
+  cultureNote: string
+  watchOut: string[]
+  fallback?: boolean
+}
 import { getSalaryBenchmark, formatSalaryRange, isSeniorTitle } from '@/lib/jobs/salary-benchmarks'
 
 interface JobListing {

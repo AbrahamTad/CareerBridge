@@ -284,8 +284,8 @@ export async function adaptCV(
   language: 'sv' | 'en' = 'sv'
 ): Promise<string> {
   const languageInstruction = language === 'sv'
-    ? 'Write the entire CV in Swedish.'
-    : 'Write the entire CV in English.'
+    ? 'Write the entire CV in Swedish. Section headings must be in Swedish: Profil, Arbetslivserfarenhet, Utbildning, Kompetenser och IT-kunskaper, Språk, Referenser.'
+    : 'Write the CV body content in English. Section headings must still be in Swedish: Profil, Arbetslivserfarenhet, Utbildning, Kompetenser och IT-kunskaper, Språk, Referenser.'
 
   return complete({
     maxTokens: 3072,

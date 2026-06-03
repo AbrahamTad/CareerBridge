@@ -12,7 +12,12 @@ import { analyzeAts } from '@/lib/ai/ats-scorer'
 const CV_GENERATION_UNAVAILABLE_MESSAGE =
   'CV generation is temporarily unavailable. Please try again later.'
 
-const REQUIRED_CV_HEADINGS = ['profil', 'arbetslivserfarenhet', 'utbildning']
+// Accept both Swedish and English section headings so English-language CVs pass validation.
+const REQUIRED_CV_HEADING_GROUPS = [
+  ['profil', 'profile', 'professional profile', 'yrkesprofil', 'sammanfattning', 'summary'],
+  ['arbetslivserfarenhet', 'erfarenhet', 'work experience', 'employment', 'experience'],
+  ['utbildning', 'education', 'academic background'],
+]
 
 const PROVIDER_ERROR_PATTERNS = [
   /\bAIProviderError\b/i,
@@ -64,9 +69,11 @@ function validateGeneratedCvContent(content: string) {
     .filter((line) => /^#{1,6}\s+/.test(line) || /^\*\*[^*]+\*\*:?\s*$/.test(line))
     .map(normalizeHeading)
 
-  const missingHeadings = REQUIRED_CV_HEADINGS.filter((heading) => !headings.includes(heading))
-  if (missingHeadings.length > 0) {
-    return { valid: false, reason: `missing CV sections: ${missingHeadings.join(', ')}`, content: cleaned }
+  const missingGroups = REQUIRED_CV_HEADING_GROUPS.filter(
+    (group) => !group.some((variant) => headings.includes(variant))
+  )
+  if (missingGroups.length > 0) {
+    return { valid: false, reason: `missing CV sections: ${missingGroups.map((g) => g[0]).join(', ')}`, content: cleaned }
   }
 
   const errorPattern = PROVIDER_ERROR_PATTERNS.find((pattern) => pattern.test(cleaned))

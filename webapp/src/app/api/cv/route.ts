@@ -36,6 +36,7 @@ export async function GET() {
       rawText: true,
       createdAt: true,
       fileSize: true,
+      parsedData: true,
     },
   });
 

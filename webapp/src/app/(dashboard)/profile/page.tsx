@@ -19,11 +19,14 @@ import type { StarStory } from "@/app/api/ai/star-stories/route";
 import { PageHero } from "@/components/ui/ModernShell";
 
 export default function ProfilePage() {
+  type ParsedCvData = Record<string, unknown>
+
   const [cv, setCv] = useState<{
     id: string;
     fileName?: string | null;
     rawText: string;
     createdAt: string;
+    parsedData?: ParsedCvData | null;
   } | null>(null);
   const [profile, setProfile] = useState<{
     fullName?: string | null;
@@ -464,6 +467,9 @@ export default function ProfilePage() {
         )}
       </div>
 
+      {/* CV Analysis Results */}
+      {cv?.parsedData && <CvAnalysisCard parsedData={cv.parsedData as Record<string, unknown>} onReanalyze={runAnalysis} analyzing={analyzing} />}
+
       {/* Profile Form */}
       <div className="rounded-xl border border-white/70 bg-white/80 p-6 shadow-sm backdrop-blur">
         {/* Profile fields feed the matching model with location, LIA, and skill context. */}
@@ -690,6 +696,105 @@ export default function ProfilePage() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function strArr(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+}
+
+function CvAnalysisCard({
+  parsedData,
+  onReanalyze,
+  analyzing,
+}: {
+  parsedData: Record<string, unknown>;
+  onReanalyze: () => void;
+  analyzing: boolean;
+}) {
+  const skills = strArr(parsedData.skills).slice(0, 12);
+  const tools = strArr(parsedData.tools).slice(0, 8);
+  const targetRoles = strArr(parsedData.targetRoles).slice(0, 6);
+  const sectors = strArr(parsedData.sectors).slice(0, 4);
+  const seniority = typeof parsedData.seniorityLevel === 'string' ? parsedData.seniorityLevel : null;
+  const isLia = parsedData.isLIAEligible === true;
+  const source = typeof parsedData.source === 'string' ? parsedData.source : null;
+  const hasRich = skills.length > 0 || targetRoles.length > 0;
+
+  if (!hasRich) return null;
+
+  const seniorityLabel: Record<string, string> = {
+    junior: 'Junior', mid: 'Mid-level', senior: 'Senior', student: 'Student/LIA',
+  };
+
+  return (
+    <div className="rounded-xl border border-white/70 bg-white/80 p-6 shadow-sm backdrop-blur">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="font-semibold text-slate-900 flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-blue-600" />
+            CV-analys
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-400">
+            {source === 'markitdown-service' ? 'Strukturerad Markdown-analys' : 'Lokal heuristisk analys'}
+            {' · '}
+            <button onClick={onReanalyze} disabled={analyzing} className="text-blue-600 hover:underline disabled:opacity-50">
+              {analyzing ? 'Analyserar...' : 'Kör djupare AI-analys'}
+            </button>
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {seniority && (
+            <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+              {seniorityLabel[seniority] ?? seniority}
+            </span>
+          )}
+          {isLia && (
+            <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-700">
+              LIA-eligible
+            </span>
+          )}
+          {sectors.map((s) => (
+            <span key={s} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 capitalize">
+              {s}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        {targetRoles.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Målroller</p>
+            <div className="flex flex-wrap gap-1">
+              {targetRoles.map((r) => (
+                <span key={r} className="rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-800 border border-green-200">{r}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        {skills.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Kompetenser</p>
+            <div className="flex flex-wrap gap-1">
+              {skills.map((s) => (
+                <span key={s} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">{s}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        {tools.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Verktyg & teknik</p>
+            <div className="flex flex-wrap gap-1">
+              {tools.map((t) => (
+                <span key={t} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">{t}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -2,14 +2,17 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
-import { Loader2, Plus, Trash2, ExternalLink, ChevronDown, ChevronUp, CalendarDays, StickyNote, FileDown, Bell } from 'lucide-react'
+import { Loader2, Plus, Trash2, ExternalLink, ChevronDown, ChevronUp, CalendarDays, StickyNote, FileDown, Bell, GraduationCap } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { APP_STATUS_LABELS, APP_STATUS_COLORS } from '@/types'
 import type { AppStatusType } from '@/types'
 import { PageHero } from '@/components/ui/ModernShell'
 
+interface InterviewQuestion { q: string; tip: string }
+
 interface Application {
   id: string
+  jobListingId?: string | null
   companyName: string
   jobTitle: string
   jobUrl?: string | null
@@ -410,6 +413,8 @@ function DetailPanel({
   const [interviewAt, setInterviewAt] = useState(toDateInputValue(app.interviewAt))
   const [saving, setSaving] = useState(false)
   const notesRef = useRef(app.notes ?? '')
+  const [prepQuestions, setPrepQuestions] = useState<InterviewQuestion[] | null>(null)
+  const [prepLoading, setPrepLoading] = useState(false)
 
   async function saveNotes() {
     const value = notes.trim()
@@ -468,6 +473,50 @@ function DetailPanel({
           >
             Ta bort datum
           </button>
+        )}
+
+        {app.jobListingId && (app.status === 'INTERVIEW' || app.interviewAt) && (
+          <div className="mt-3">
+            {!prepQuestions ? (
+              <button
+                onClick={async () => {
+                  setPrepLoading(true)
+                  try {
+                    const res = await fetch('/api/ai/interview-prep', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ jobListingId: app.jobListingId }),
+                    })
+                    const data = await res.json()
+                    if (res.ok) setPrepQuestions(data.questions ?? [])
+                    else toast.error(data.error ?? 'Kunde inte generera intervjufrågor')
+                  } catch {
+                    toast.error('Kunde inte nå AI-tjänsten')
+                  } finally {
+                    setPrepLoading(false)
+                  }
+                }}
+                disabled={prepLoading}
+                className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+              >
+                {prepLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GraduationCap className="h-3.5 w-3.5" />}
+                Förbered intervju
+              </button>
+            ) : (
+              <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 space-y-2">
+                <p className="text-xs font-semibold text-violet-800 flex items-center gap-1">
+                  <GraduationCap className="h-3.5 w-3.5" /> Intervjufrågor
+                </p>
+                {prepQuestions.map((q, i) => (
+                  <div key={i} className="rounded bg-white p-2 text-xs shadow-sm">
+                    <p className="font-medium text-slate-800">{i + 1}. {q.q}</p>
+                    {q.tip && <p className="mt-1 text-slate-500 italic">{q.tip}</p>}
+                  </div>
+                ))}
+                <button onClick={() => setPrepQuestions(null)} className="text-xs text-violet-500 hover:text-violet-700">Dölj</button>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

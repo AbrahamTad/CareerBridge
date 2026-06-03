@@ -17,6 +17,7 @@ import {
 } from '@/lib/document-actions'
 import { cleanCvMarkdown } from '@/lib/cv-export-format'
 import type { InterviewPrepResult } from '@/app/api/ai/interview-prep/route'
+import { getSalaryBenchmark, formatSalaryRange, isSeniorTitle } from '@/lib/jobs/salary-benchmarks'
 
 interface JobListing {
   id: string
@@ -1106,16 +1107,21 @@ export default function JobsPage() {
                     {job.location && <span>📍 {job.location}</span>}
                     {job.isRemote && <span>🌐 Remote</span>}
                     {job.isHybrid && <span>🏠 Hybrid</span>}
-                    {(job.salaryMin || job.salaryMax) && (
+                    {(job.salaryMin || job.salaryMax) ? (
                       <span>💰 {formatSalary(job.salaryMin, job.salaryMax, job.currency ?? 'SEK')}</span>
-                    )}
+                    ) : (() => {
+                      const bench = getSalaryBenchmark(job.title, isSeniorTitle(job.title))
+                      return bench ? (
+                        <span className="text-slate-400">≈ {formatSalaryRange(bench)}</span>
+                      ) : null
+                    })()}
                     {job.jobType && <span>⏰ {job.jobType}</span>}
                   </div>
                   {job.match && (
                     <MatchBreakdown match={job.match} jobId={job.id} />
                   )}
                   {interviewPrep[job.id] && (
-                    <InterviewPrepPanel prep={interviewPrep[job.id]} />
+                    <InterviewPrepPanel prep={interviewPrep[job.id]} jobTitle={job.title} />
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -1193,8 +1199,12 @@ function barColor(pct: number) {
 
 type MatchData = NonNullable<JobListing['match']>
 
-function InterviewPrepPanel({ prep }: { prep: InterviewPrepResult }) {
+function InterviewPrepPanel({ prep, jobTitle }: { prep: InterviewPrepResult; jobTitle: string }) {
   const [open, setOpen] = useState(true)
+  const bench = getSalaryBenchmark(jobTitle, isSeniorTitle(jobTitle))
+  const salaryDisplay = bench
+    ? `${formatSalaryRange(bench)} — ${prep.salaryTip || 'Se även Unionen och Glassdoor för aktuella uppgifter.'}`
+    : prep.salaryTip
 
   return (
     <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm">
@@ -1221,10 +1231,10 @@ function InterviewPrepPanel({ prep }: { prep: InterviewPrepResult }) {
           ))}
 
           <div className="grid gap-2 text-xs sm:grid-cols-3">
-            {prep.salaryTip && (
+            {salaryDisplay && (
               <div className="rounded-lg bg-white p-2.5 shadow-sm">
                 <p className="font-semibold text-slate-700">Lön</p>
-                <p className="mt-0.5 text-slate-500">{prep.salaryTip}</p>
+                <p className="mt-0.5 text-slate-500">{salaryDisplay}</p>
               </div>
             )}
             {prep.cultureNote && (

@@ -174,6 +174,14 @@ export default function ApplicationsPage() {
     return acc
   }, {} as Record<AppStatusType, number>)
 
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000)
+  const thisWeekCount = apps.filter((a) => new Date(a.createdAt) >= weekAgo).length
+  const appliedCount = statusCounts['APPLIED'] ?? 0
+  const respondedCount = (statusCounts['RESPONDED'] ?? 0) + (statusCounts['INTERVIEW'] ?? 0) + (statusCounts['OFFER'] ?? 0)
+  const totalApplied = appliedCount + respondedCount + (statusCounts['REJECTED'] ?? 0)
+  const responseRate = totalApplied > 0 ? Math.round((respondedCount / totalApplied) * 100) : null
+  const followUpCount = apps.filter(needsFollowUp).length
+
   return (
     <div className="space-y-6">
       <PageHero
@@ -181,6 +189,22 @@ export default function ApplicationsPage() {
         title="Track every opportunity from saved to offer"
         description="Keep applications, scores, statuses, and next actions visible as your AI search produces stronger matches."
       />
+      {apps.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { label: 'Totalt', value: apps.length },
+            { label: 'Denna vecka', value: thisWeekCount },
+            { label: 'Svarsfrekvens', value: responseRate !== null ? `${responseRate}%` : '–' },
+            { label: 'Följ upp', value: followUpCount, highlight: followUpCount > 0 },
+          ].map((stat) => (
+            <div key={stat.label} className={`rounded-xl border p-4 text-center ${stat.highlight ? 'border-amber-200 bg-amber-50' : 'border-white/70 bg-white/80 backdrop-blur'}`}>
+              <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
+              <p className="mt-0.5 text-xs font-medium text-slate-500">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Ansökningsspårare</h1>

@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   if (isAuthResponse(auth)) return auth
 
   const body = await request.json()
-  const { jobListingId, companyName, jobTitle, jobUrl, status = 'SAVED', score } = body
+  const { jobListingId, companyName, jobTitle, jobUrl, status = 'SAVED', score, appliedAt } = body
 
   let resolvedCompanyName = companyName
   let resolvedJobTitle = jobTitle
@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
       jobUrl: jobUrl || null,
       status,
       score: score ?? null,
+      appliedAt: appliedAt ? new Date(appliedAt) : undefined,
     },
   })
 

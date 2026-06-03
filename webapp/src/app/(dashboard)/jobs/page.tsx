@@ -2,7 +2,7 @@
 
 // Dashboard for searching, ranking, and adapting CVs for Swedish job opportunities.
 import { useState, useEffect, useRef } from 'react'
-import { Search, Filter, Loader2, ExternalLink, BookmarkPlus, BrainCircuit, Sparkles, FileText, Copy, X, MapPin, Download, GraduationCap } from 'lucide-react'
+import { Search, Filter, Loader2, ExternalLink, BookmarkPlus, BrainCircuit, Sparkles, FileText, Copy, X, MapPin, Download, GraduationCap, CheckCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatSalary } from '@/lib/utils'
 import AISearchProgress, { createAISearchStats } from '@/components/ai/AISearchProgress'
@@ -581,6 +581,8 @@ export default function JobsPage() {
     return new Intl.DateTimeFormat('sv-SE', { dateStyle: 'medium' }).format(new Date(date))
   }
 
+  const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())
+
   async function handleSave(jobId: string) {
     try {
       const res = await fetch('/api/applications', {
@@ -592,6 +594,25 @@ export default function JobsPage() {
       toast.success('Jobb sparat i dina ansökningar')
     } catch {
       toast.error('Kunde inte spara jobbet')
+    }
+  }
+
+  async function handleMarkApplied(jobId: string, jobTitle: string, companyName: string) {
+    try {
+      const res = await fetch('/api/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobListingId: jobId,
+          status: 'APPLIED',
+          appliedAt: new Date().toISOString(),
+        }),
+      })
+      if (!res.ok) throw new Error()
+      setAppliedIds((prev) => new Set(prev).add(jobId))
+      toast.success(`Markerat som ansökt — ${jobTitle} hos ${companyName}`)
+    } catch {
+      toast.error('Kunde inte markera som ansökt')
     }
   }
 
@@ -1154,9 +1175,23 @@ export default function JobsPage() {
                     {prepLoading === job.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GraduationCap className="h-3.5 w-3.5" />}
                     Intervju
                   </button>
+                  {appliedIds.has(job.id) ? (
+                    <span className="flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5 text-xs font-medium text-green-700">
+                      <CheckCheck className="h-3.5 w-3.5" /> Ansökt
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleMarkApplied(job.id, job.title, job.company.name)}
+                      title="Markera som ansökt idag"
+                      className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:border-green-300 hover:text-green-700"
+                    >
+                      <CheckCheck className="h-3.5 w-3.5" />
+                      Ansökt
+                    </button>
+                  )}
                   <button
                     onClick={() => handleSave(job.id)}
-                    title="Spara"
+                    title="Spara för senare"
                     className="rounded-lg border p-2 text-slate-400 hover:border-blue-200 hover:text-blue-600"
                   >
                     <BookmarkPlus className="h-4 w-4" />

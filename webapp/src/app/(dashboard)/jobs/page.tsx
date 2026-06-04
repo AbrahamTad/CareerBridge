@@ -1,7 +1,8 @@
 'use client'
 
 // Dashboard for searching, ranking, and adapting CVs for Swedish job opportunities.
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Search, Filter, Loader2, ExternalLink, BookmarkPlus, BrainCircuit, Sparkles, FileText, Copy, X, MapPin, Download, GraduationCap, CheckCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatSalary } from '@/lib/utils'
@@ -273,6 +274,9 @@ export default function JobsPage() {
   }
   const activeSearch = useRef<AbortController | null>(null)
   const autoSourceScanDone = useRef(false)
+  const searchParams = useSearchParams()
+  const autoSearch = searchParams.get('autoSearch') === '1'
+  const autoLia = searchParams.get('lia') === '1'
   const lastSearchTerms = Array.isArray(lastSmartResult?.searchedFor) && lastSmartResult.searchedFor.length
     ? lastSmartResult.searchedFor.join(', ')
     : query || 'CV-profil'
@@ -441,6 +445,11 @@ export default function JobsPage() {
     }
     // Kick off a background portal scan on first load if stale — no await.
     backgroundPortalScan()
+    // Auto-trigger AI search when navigated here with ?autoSearch=1
+    if (autoSearch) {
+      if (autoLia) setLiaOnly(true)
+      handleSmartSearch()
+    }
   }
 
   const PORTAL_SCAN_STALE_MS = 4 * 60 * 60 * 1000 // 4 hours

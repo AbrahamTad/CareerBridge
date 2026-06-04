@@ -231,8 +231,10 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
             { href: '/profile', label: 'Uppdatera CV', icon: '📄' },
-            { href: '/jobs', label: 'Sök jobb', icon: '🔍' },
-            { href: '/cv-builder', label: 'Generera CV', icon: '✨' },
+            { href: '/jobs?autoSearch=1', label: 'Sök jobb nu', icon: '🔍' },
+            ...(hasCV && dbUser?.profile?.liaEnabled
+              ? [{ href: '/jobs?autoSearch=1&lia=1', label: 'Sök LIA nu', icon: '🎓' }]
+              : [{ href: '/cv-builder', label: 'Generera CV', icon: '✨' }]),
             { href: '/companies', label: 'Hitta företag', icon: '🏢' },
           ].map((action) => (
             <Link

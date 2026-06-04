@@ -548,25 +548,44 @@ export default function ProfilePage() {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">
-              Önskade roller (kommaseparerade)
+              Önskade roller
             </label>
+            {(profile?.targetRoles?.length ?? 0) > 0 && (
+              <div className="mb-1.5 flex flex-wrap gap-1">
+                {profile!.targetRoles!.map((r) => (
+                  <span key={r} className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-800">{r}</span>
+                ))}
+              </div>
+            )}
             <input
               name="targetRoles"
               defaultValue={profile?.targetRoles?.join(", ") ?? ""}
               className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
               placeholder="Frontend Developer, QA Engineer"
             />
+            <p className="mt-1 text-xs text-slate-400">Kommaseparerade — uppdateras automatiskt vid AI-analys</p>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">
-              Kompetenser (kommaseparerade)
+              Kompetenser
             </label>
+            {(profile?.skills?.length ?? 0) > 0 && (
+              <div className="mb-1.5 flex flex-wrap gap-1">
+                {profile!.skills!.slice(0, 16).map((s) => (
+                  <span key={s} className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{s}</span>
+                ))}
+                {(profile!.skills!.length ?? 0) > 16 && (
+                  <span className="text-xs text-slate-400 self-center">+{profile!.skills!.length - 16} till</span>
+                )}
+              </div>
+            )}
             <input
               name="skills"
               defaultValue={profile?.skills?.join(", ") ?? ""}
               className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
               placeholder="React, TypeScript, Python"
             />
+            <p className="mt-1 text-xs text-slate-400">Kommaseparerade — uppdateras automatiskt vid AI-analys</p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div>

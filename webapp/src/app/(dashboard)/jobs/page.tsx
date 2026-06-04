@@ -241,9 +241,11 @@ export default function JobsPage() {
   const SAVED_SEARCHES_KEY = 'cb_saved_searches'
   type SavedSearch = { id: string; label: string; query: string; location: string; liaOnly: boolean }
 
-  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(() => {
-    try { return JSON.parse(localStorage.getItem(SAVED_SEARCHES_KEY) ?? '[]') } catch { return [] }
-  })
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
+
+  useEffect(() => {
+    try { setSavedSearches(JSON.parse(localStorage.getItem(SAVED_SEARCHES_KEY) ?? '[]')) } catch {}
+  }, [])
 
   function persistSearches(list: SavedSearch[]) {
     setSavedSearches(list)
@@ -445,6 +447,7 @@ export default function JobsPage() {
   const PORTAL_SCAN_KEY = 'cb_last_portal_scan'
 
   function isPortalScanStale(): boolean {
+    if (typeof window === 'undefined') return false
     try {
       const last = localStorage.getItem(PORTAL_SCAN_KEY)
       if (!last) return true
@@ -455,6 +458,7 @@ export default function JobsPage() {
   }
 
   function markPortalScanned() {
+    if (typeof window === 'undefined') return
     try { localStorage.setItem(PORTAL_SCAN_KEY, String(Date.now())) } catch {}
   }
 

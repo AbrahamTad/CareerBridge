@@ -3,7 +3,7 @@
 // User-facing editor for AI-generated letters and short application emails.
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Mail, Loader2, Copy, RotateCcw, Download, Zap } from 'lucide-react'
+import { Mail, Loader2, Copy, RotateCcw, Download, Zap, History } from 'lucide-react'
 import {
   copyCleanText,
   downloadCleanText,
@@ -34,13 +34,16 @@ export default function CoverLetterPage() {
   const [ats, setAts] = useState<AtsScore | null>(null)
   const [editingResult, setEditingResult] = useState(false)
   const [savedJobs, setSavedJobs] = useState<SavedJob[]>([])
+  const [history, setHistory] = useState<{ id: string; jobTitle: string | null; companyName: string | null; createdAt: string; content: string }[]>([])
 
   useEffect(() => {
     fetch('/api/jobs?minMatch=55')
       .then((res) => res.ok ? res.json() : null)
-      .then((data) => {
-        if (data?.jobs) setSavedJobs(data.jobs.slice(0, 20))
-      })
+      .then((data) => { if (data?.jobs) setSavedJobs(data.jobs.slice(0, 20)) })
+      .catch(() => {})
+    fetch('/api/cover-letter/history')
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => { if (data?.letters) setHistory(data.letters) })
       .catch(() => {})
   }, [])
 
@@ -248,6 +251,37 @@ export default function CoverLetterPage() {
           )}
         </div>
       </div>
+
+      {history.length > 0 && (
+        <div className="rounded-xl border bg-white p-5">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <History className="h-4 w-4 text-slate-400" />
+            Tidigare ansökningstexter
+          </h3>
+          <div className="space-y-1.5">
+            {history.map((item) => (
+              <div key={item.id} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-slate-50">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-slate-800">{item.jobTitle ?? 'Okänd roll'}</p>
+                  <p className="text-xs text-slate-400">{item.companyName ?? ''} · {new Date(item.createdAt).toLocaleDateString('sv-SE')}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setResult(item.content)
+                    setJobTitle(item.jobTitle ?? '')
+                    setCompanyName(item.companyName ?? '')
+                    setAts(null)
+                    setEditingResult(false)
+                  }}
+                  className="ml-3 shrink-0 text-xs font-medium text-blue-600 hover:underline"
+                >
+                  Återställ
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

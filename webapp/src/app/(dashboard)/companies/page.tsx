@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Building2, Loader2, ExternalLink, Copy } from 'lucide-react'
+import { Building2, Loader2, ExternalLink, Copy, BookmarkPlus, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageHero } from '@/components/ui/ModernShell'
 
@@ -25,6 +25,27 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<DiscoveredCompany[]>([])
   const [fallback, setFallback] = useState(false)
   const [activeOnly, setActiveOnly] = useState(false)
+  const [savedCompanies, setSavedCompanies] = useState<Set<string>>(new Set())
+
+  async function handleSaveCompany(company: DiscoveredCompany) {
+    try {
+      const res = await fetch('/api/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName: company.name,
+          jobTitle: targetRole || 'Spontanansökan',
+          jobUrl: company.careerPageUrl ?? company.linkedinUrl ?? null,
+          status: 'SAVED',
+        }),
+      })
+      if (!res.ok) throw new Error()
+      setSavedCompanies((prev) => new Set(prev).add(company.name))
+      toast.success(`${company.name} sparad i ansökningsspåraren`)
+    } catch {
+      toast.error('Kunde inte spara företaget')
+    }
+  }
 
   useEffect(() => {
     async function loadProfileDefaults() {
@@ -165,6 +186,18 @@ export default function CompaniesPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col gap-2">
+                  {savedCompanies.has(company.name) ? (
+                    <span className="flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700">
+                      <Check className="h-3 w-3" /> Sparad
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleSaveCompany(company)}
+                      className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-blue-200 hover:text-blue-600"
+                    >
+                      <BookmarkPlus className="h-3 w-3" /> Spara
+                    </button>
+                  )}
                   {company.careerPageUrl && (
                     <a href={company.careerPageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-slate-50">
                       <ExternalLink className="h-3 w-3" /> Karriärsida

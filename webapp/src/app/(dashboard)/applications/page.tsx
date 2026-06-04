@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
-import { Loader2, Plus, Trash2, ExternalLink, ChevronDown, ChevronUp, CalendarDays, StickyNote, FileDown, Bell, GraduationCap } from 'lucide-react'
+import { Loader2, Plus, Trash2, ExternalLink, ChevronDown, ChevronUp, CalendarDays, StickyNote, FileDown, Bell, GraduationCap, Copy } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { APP_STATUS_LABELS, APP_STATUS_COLORS } from '@/types'
 import type { AppStatusType } from '@/types'
 import { PageHero } from '@/components/ui/ModernShell'
+import { getSalaryBenchmark, formatSalaryRange, isSeniorTitle } from '@/lib/jobs/salary-benchmarks'
 
 interface InterviewQuestion { q: string; tip: string }
 
@@ -473,6 +474,33 @@ function DetailPanel({
           >
             Ta bort datum
           </button>
+        )}
+
+        {(() => {
+          const bench = getSalaryBenchmark(app.jobTitle, isSeniorTitle(app.jobTitle))
+          return bench ? (
+            <div className="mt-3 rounded-lg bg-slate-50 border px-3 py-2 text-xs text-slate-600">
+              <span className="font-semibold text-slate-700">Löneläge: </span>
+              {formatSalaryRange(bench)}
+              <span className="ml-2 text-slate-400">(Unionen/Medlingsinstitutet 2025)</span>
+            </div>
+          ) : null
+        })()}
+
+        {app.status === 'APPLIED' && (
+          <div className="mt-3">
+            <button
+              onClick={() => {
+                const days = daysSince(app.appliedAt) ?? daysSince(app.createdAt) ?? 14
+                const template = `Hej,\n\nJag sökte tjänsten som ${app.jobTitle} hos er för ${days} dagar sedan och vill gärna följa upp min ansökan.\n\nJag är fortfarande mycket intresserad av rollen och ser fram emot att höra från er.\n\nMed vänliga hälsningar`
+                navigator.clipboard.writeText(template).then(() => toast.success('Uppföljningsmall kopierad'))
+              }}
+              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50"
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Kopiera uppföljningsmall
+            </button>
+          </div>
         )}
 
         {app.jobListingId && (app.status === 'INTERVIEW' || app.interviewAt) && (

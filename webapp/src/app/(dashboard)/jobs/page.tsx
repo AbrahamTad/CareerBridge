@@ -1230,6 +1230,9 @@ export default function JobsPage() {
                     })()}
                     {job.jobType && <span>⏰ {job.jobType}</span>}
                   </div>
+                  {job.description && (
+                    <JobDescriptionPreview description={job.description} />
+                  )}
                   {job.match && (
                     <MatchBreakdown match={job.match} jobId={job.id} />
                   )}
@@ -1325,6 +1328,28 @@ function barColor(pct: number) {
 }
 
 type MatchData = NonNullable<JobListing['match']>
+
+function JobDescriptionPreview({ description }: { description: string }) {
+  const [open, setOpen] = useState(false)
+  const SHORT = 280
+  const text = description.replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, ' ').trim()
+  const isLong = text.length > SHORT
+
+  if (!text) return null
+
+  return (
+    <div className="mt-2 text-xs text-slate-500">
+      <p className={open ? '' : 'line-clamp-3'}>
+        {open || !isLong ? text : `${text.slice(0, SHORT)}…`}
+      </p>
+      {isLong && (
+        <button onClick={() => setOpen((v) => !v)} className="mt-0.5 font-medium text-slate-400 hover:text-slate-600">
+          {open ? 'Visa mindre' : 'Visa mer'}
+        </button>
+      )}
+    </div>
+  )
+}
 
 function InterviewPrepPanel({ prep, jobTitle }: { prep: InterviewPrepResult; jobTitle: string }) {
   const [open, setOpen] = useState(true)

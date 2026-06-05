@@ -40,7 +40,12 @@ export async function getDashboardData(supabaseUserId: string) {
       'dashboard.recentMatches',
       () => prisma.jobMatch.findMany({
         where: { userId, score: { gte: 2.75 } },
-        include: { jobListing: { include: { company: true } } },
+        select: {
+          id: true,
+          score: true,
+          jobListingId: true,
+          jobListing: { select: { title: true, company: { select: { name: true } } } },
+        },
         orderBy: { score: 'desc' },
         take: 5,
       }),

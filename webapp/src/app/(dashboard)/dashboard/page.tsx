@@ -168,30 +168,31 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <ul className="space-y-3">
-              {recentMatches.map((match) => (
-                <li key={match.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">
-                      {match.jobListing.title}
-                    </p>
-                    <p className="text-xs text-slate-400">{match.jobListing.company.name}</p>
-                  </div>
-                  <div className="ml-4 flex items-center gap-2">
-                    {(() => {
-                      const pct = Math.round(match.score * 20)
-                      return (
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          pct >= 75 ? 'bg-green-100 text-green-700' :
-                          pct >= 55 ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
-                          {pct}/100
-                        </span>
-                      )
-                    })()}
-                  </div>
-                </li>
-              ))}
+              {recentMatches.map((match) => {
+                const pct = Math.round(match.score * 20)
+                return (
+                  <li key={match.id}>
+                    <Link
+                      href={`/jobs?ids=${match.jobListingId}`}
+                      className="flex items-center justify-between rounded-lg border p-3 hover:border-blue-200 hover:bg-blue-50 transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-900">
+                          {match.jobListing.title}
+                        </p>
+                        <p className="text-xs text-slate-400">{match.jobListing.company.name}</p>
+                      </div>
+                      <span className={`ml-4 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        pct >= 75 ? 'bg-green-100 text-green-700' :
+                        pct >= 55 ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {pct}/100
+                      </span>
+                    </Link>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>

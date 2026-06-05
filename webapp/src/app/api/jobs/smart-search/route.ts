@@ -247,10 +247,12 @@ export async function POST(request: NextRequest) {
   let sourceStatuses: JobSourceDiagnostic[] = []
   const searchLocations = expandJobSearchLocations(location)
   const expandedLocationSearch = searchLocations.length > 1
-  const taxonomyText = `${cvText} ${JSON.stringify(cv.parsedData ?? {})}`
+  const cvParsed = cv.parsedData && typeof cv.parsedData === 'object' && !Array.isArray(cv.parsedData)
+    ? cv.parsedData as Record<string, unknown>
+    : {}
   // Local taxonomy recommendations enrich search terms even when provider-backed analysis fails.
-  const careProfile = hasCareProfile(taxonomyText)
-  const localProfessionRecommendations = recommendLocalProfessions(taxonomyText)
+  const careProfile = hasCareProfile(cvText)
+  const localProfessionRecommendations = recommendLocalProfessions(cvText)
   const professionTerms = localProfessionRecommendations
     .slice(0, careProfile ? 10 : 3)
     .map((profession) => profession.profession)
@@ -260,9 +262,6 @@ export async function POST(request: NextRequest) {
   )
   let sourceCount = professionSearchTerms.length * searchLocations.length
 
-  const cvParsed = cv.parsedData && typeof cv.parsedData === 'object' && !Array.isArray(cv.parsedData)
-    ? cv.parsedData as Record<string, unknown>
-    : {}
   const cvSectors = Array.isArray(cvParsed.sectors)
     ? (cvParsed.sectors as string[])
     : localProfessionRecommendations.map((profession) => profession.category)

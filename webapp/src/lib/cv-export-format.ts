@@ -184,6 +184,8 @@ export function cleanCvMarkdown(markdown: string): string {
   const lines = removeInternalCvSections(normalizeCvCharacters(markdown))
     .replace(/^```[\w-]*\s*/gm, '')
     .replace(/```/g, '')
+    // Convert Setext-style headings (Heading\n------) to ATX format before line processing strips the underlines
+    .replace(/^([^#\n*`>|].+)\n[-=]{3,}\s*$/gm, (_, heading) => `## ${heading.trim()}`)
     .split('\n')
 
   const cleaned: string[] = []
@@ -244,6 +246,20 @@ export function cleanCvMarkdown(markdown: string): string {
         if (key === previousHeading) continue
         previousHeading = key
         cleaned.push(`## ${mappedHeading}`)
+        hasDocumentContent = true
+        continue
+      }
+    }
+
+    // Detect plain-text lines (no # or **) that exactly match a known CV heading name.
+    // This handles AI output that uses unhighlighted headings or Setext headings whose
+    // underlines were already stripped by the DECORATIVE_LINE filter.
+    if (hasDocumentContent && !BULLET_PREFIX.test(line)) {
+      const plainKey = normalizeLabel(inlineLine)
+      const plainMapped = CV_HEADING_MAP[plainKey]
+      if (plainMapped && plainKey !== previousHeading) {
+        previousHeading = plainKey
+        cleaned.push(`## ${plainMapped}`)
         hasDocumentContent = true
         continue
       }

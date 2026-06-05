@@ -4,6 +4,8 @@ import { detectContentLanguage } from './language-detector'
 import { providerLabel } from './providers/index'
 import { AIProviderError, type CompletionRequest } from './types'
 
+const FACTS_ONLY = 'Use only facts from the CV. Do not invent experience, jobs, education, certificates, dates, or metrics.'
+
 /**
  * Return the best available CV text for AI prompts.
  * Prefers cleanedMarkdown (structured, token-efficient) over rawText.
@@ -179,7 +181,7 @@ export async function generateCoverLetter(
     maxTokens: 1024,
     task: 'cover-letter',
     languageHint: detectContentLanguage(cvText, jobDescription),
-    system: `You are an expert cover letter writer. Create a tailored, honest, and compelling cover letter based only on the candidate's actual experience. ${langInstruction} Tone: ${tone}. Do NOT invent experience or skills not present in the CV.`,
+    system: `You are an expert cover letter writer. Create a tailored, honest, and compelling cover letter. ${langInstruction} Tone: ${tone}. ${FACTS_ONLY}`,
     user: `Write a cover letter for:\nJob: ${jobTitle} at ${companyName}\n\nJob Description:\n${jobDescription}\n\nCandidate CV:\n${cvText}`,
   })
 }
@@ -201,7 +203,7 @@ export async function generateLiaPraktikLetter(
     task: 'lia-praktik-letter',
     languageHint: detectContentLanguage(cvText, opportunityDescription),
     system: `You write honest, concise applications for Swedish LIA, praktik, internship, and trainee opportunities. ${languageInstruction}
-Use only facts from the CV. Explain the candidate's education, relevant skills, learning goals, and how the placement can create value for the workplace. Do not invent experience, dates, certificates, or school requirements.`,
+Explain the candidate's education, relevant skills, learning goals, and how the placement can create value for the workplace. ${FACTS_ONLY}`,
     user: `Write a LIA/praktik application letter for:\nOpportunity: ${role} at ${companyName}\n\nDescription:\n${opportunityDescription}\n\nCandidate CV:\n${cvText}`,
   })
 }
@@ -223,7 +225,7 @@ export async function generateEmailApplication(
     task: 'email-application',
     languageHint: detectContentLanguage(cvText, opportunityDescription),
     system: `Write a short, ready-to-edit application email. ${languageInstruction}
-Use only facts from the CV. Include a clear subject line, a compact message, and a professional closing. Keep the message under 180 words.`,
+Include a clear subject line, a compact message, and a professional closing. Keep the message under 180 words. ${FACTS_ONLY}`,
     user: `Write an application email for:\nRole: ${role} at ${companyName}\n\nDescription:\n${opportunityDescription}\n\nCandidate CV:\n${cvText}`,
   })
 }
@@ -304,7 +306,7 @@ Rules:
 - Produce a finished professional CV only, not an AI report or job-match analysis.
 - The first heading must be the candidate's full name, not "Anpassat CV", the job title, or the company name.
 - Put contact information directly below the name as plain text lines. Do not use emoji, icons, or decorative symbols.
-- Use this structure only: Profil, Arbetslivserfarenhet, Utbildning, Kompetenser och IT-kunskaper, Språk, Referenser.
+- Use this exact structure and start every section heading with ## (two hash symbols): ## Profil, ## Arbetslivserfarenhet, ## Utbildning, ## Kompetenser och IT-kunskaper, ## Språk, ## Referenser.
 - Use bullet points for responsibilities and achievements under experience.
 - Do not add horizontal rules, decorative separators, or standalone "---" lines.
 - Keep the CV concise enough for 1-2 pages.

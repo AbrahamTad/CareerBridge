@@ -195,6 +195,10 @@ function normalize(text: string) {
     .replace(/ö/g, 'o')
 }
 
+
+// Pre-normalized once at module load — avoids re-normalizing 200+ static strings on every overlap() call.
+const NORMALIZED_SYNONYM_GROUPS = SYNONYM_GROUPS.map((group) => group.map(normalize))
+
 function unique(values: string[]) {
   const seen = new Set<string>()
   return values.filter((value) => {
@@ -253,10 +257,13 @@ function seniorityFromText(text: string, fallback: StructuredCvProfile['seniorit
 
 function overlap(a: string[], b: string[]) {
   const bSet = new Set(b.map(normalize))
-  return unique(a).filter((item) => bSet.has(normalize(item)) || SYNONYM_GROUPS.some((group) => {
-    const normalizedGroup = group.map(normalize)
-    return normalizedGroup.includes(normalize(item)) && normalizedGroup.some((synonym) => bSet.has(synonym))
-  }))
+  return unique(a).filter((item) => {
+    const normItem = normalize(item)
+    if (bSet.has(normItem)) return true
+    return NORMALIZED_SYNONYM_GROUPS.some((group) =>
+      group.includes(normItem) && group.some((synonym) => bSet.has(synonym))
+    )
+  })
 }
 
 function ratio(matched: number, total: number) {
@@ -336,14 +343,16 @@ export function parseJobProfile(job: MatchableJob): StructuredJobProfile {
 
 export function scoreJobRelevance(cv: StructuredCvProfile, job: StructuredJobProfile): RelevanceScore {
   const matchedSkills = overlap(cv.skills, [...job.requiredSkills, ...job.niceToHaveSkills])
-  const missingSkills = unique(job.requiredSkills.filter((skill) => !matchedSkills.map(normalize).includes(normalize(skill))))
+  const matchedNorm = new Set(matchedSkills.map(normalize))
+  const missingSkills = unique(job.requiredSkills.filter((skill) => !matchedNorm.has(normalize(skill))))
   const hardRejectReasons: string[] = []
   const cvCategories = cv.categories.length ? cv.categories : ['unknown']
   const jobCategories = job.categories.length ? job.categories : ['unknown']
   const categoryMatch = overlap(cvCategories, jobCategories).length > 0 || jobCategories.includes('unknown')
   const wantsHealthcare = cv.categories.includes('healthcare') || cv.preferredRoles.some((role) => includesAny(role, HEALTHCARE_TERMS))
   const wantsIt = cv.categories.includes('it') || cv.preferredRoles.some((role) => includesAny(role, IT_TERMS))
-  const missingLicenses = job.requiredLicenses.filter((license) => !cv.licenses.map(normalize).includes(normalize(license)))
+  const licenseNorm = new Set(cv.licenses.map(normalize))
+  const missingLicenses = job.requiredLicenses.filter((license) => !licenseNorm.has(normalize(license)))
 
   if ((cv.seniorityLevel === 'student' || cv.seniorityLevel === 'junior') && job.seniority === 'senior') {
     hardRejectReasons.push('Rollen ar senior medan CV:t signalerar junior/studentniva.')

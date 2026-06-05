@@ -414,28 +414,55 @@ export default function JobsPage() {
     }
   }
 
+  const PROFILE_CACHE_KEY = 'cb_profile_cache'
+  const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
+
+  function getCachedProfile(): ProfileLocation | null {
+    try {
+      const raw = localStorage.getItem(PROFILE_CACHE_KEY)
+      if (!raw) return null
+      const { data, ts } = JSON.parse(raw) as { data: ProfileLocation; ts: number }
+      if (Date.now() - ts > PROFILE_CACHE_TTL_MS) return null
+      return data
+    } catch {
+      return null
+    }
+  }
+
+  function setCachedProfile(profile: ProfileLocation) {
+    try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ data: profile, ts: Date.now() })) } catch {}
+  }
+
   async function loadProfileLocation() {
-    const res = await fetch('/api/profile')
-    if (!res.ok) return
-    const data = await res.json() as { profile?: ProfileLocation | null }
-    const place = data.profile?.city || data.profile?.location || ''
-    const firstRole = data.profile?.targetRoles?.[0] || ''
+    const cached = getCachedProfile()
+    let profile: ProfileLocation | null | undefined = cached
+
+    if (!profile) {
+      const res = await fetch('/api/profile')
+      if (!res.ok) return
+      const data = await res.json() as { profile?: ProfileLocation | null }
+      profile = data.profile
+      if (profile) setCachedProfile(profile)
+    }
+
+    const place = profile?.city || profile?.location || ''
+    const firstRole = profile?.targetRoles?.[0] || ''
     const profileSkills = [
-      ...(data.profile?.targetRoles ?? []),
-      ...(data.profile?.skills ?? []),
+      ...(profile?.targetRoles ?? []),
+      ...(profile?.skills ?? []),
     ].filter(Boolean).slice(0, 8)
     if (profileSkills.length) setGraphSkills(profileSkills)
     const defaultValues = {
       query: firstRole,
       location: place || 'Sverige',
-      liaOnly: Boolean(data.profile?.liaEnabled),
+      liaOnly: Boolean(profile?.liaEnabled),
       remoteOnly: false,
     }
 
     setProfileLocation(place)
     setQuery((current) => current || defaultValues.query)
     setLiaOnly((current) => current || defaultValues.liaOnly)
-    setLiaPeriods(parseLiaPeriods(data.profile ?? {}))
+    setLiaPeriods(parseLiaPeriods(profile ?? {}))
     // Default to all Sweden so AI search does not accidentally narrow to one suburb.
     setLocation((current) => current || defaultValues.location)
 
@@ -448,7 +475,7 @@ export default function JobsPage() {
     // Auto-trigger AI search when navigated here with ?autoSearch=1
     if (autoSearch) {
       if (autoLia) setLiaOnly(true)
-      handleSmartSearch()
+      setTimeout(() => handleSmartSearch(), 50)
     }
   }
 

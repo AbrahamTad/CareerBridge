@@ -171,21 +171,27 @@ function buildJobContext(job: MatchableJob) {
     `Title: ${job.title}`,
     `Employer: ${job.company.name}`,
     `Location: ${job.location ?? job.city ?? 'Not specified'}`,
-    job.requirements ? `Requirements: ${job.requirements}` : '',
-    `Description: ${job.description}`,
+    job.requirements ? `Requirements: ${job.requirements.slice(0, 800)}` : '',
+    `Description: ${(job.description ?? '').slice(0, 1800)}`,
   ].filter(Boolean).join('\n\n')
 }
 
 type CvInput = { rawText: string; cleanedMarkdown?: string | null; parsedData: Prisma.JsonValue | null }
 
 function buildCvContext(cv: CvInput) {
-  const structured = cv.parsedData && typeof cv.parsedData === 'object'
-    ? `Structured CV data:\n${JSON.stringify(cv.parsedData).slice(0, 4000)}\n\n`
-    : ''
+  const parsed = cv.parsedData && typeof cv.parsedData === 'object' && !Array.isArray(cv.parsedData)
+    ? cv.parsedData as Record<string, unknown>
+    : null
+  const meta = parsed ? [
+    Array.isArray(parsed.skills) ? `Skills: ${(parsed.skills as string[]).join(', ')}` : '',
+    Array.isArray(parsed.targetRoles) ? `Target roles: ${(parsed.targetRoles as string[]).join(', ')}` : '',
+    typeof parsed.seniorityLevel === 'string' ? `Level: ${parsed.seniorityLevel}` : '',
+    Array.isArray(parsed.sectors) ? `Sectors: ${(parsed.sectors as string[]).join(', ')}` : '',
+  ].filter(Boolean).join('\n') : ''
 
   // Use cleanedMarkdown when available — better structure, fewer tokens
   const cvBody = cv.cleanedMarkdown?.trim() || cv.rawText
-  return `${structured}CV:\n${cvBody.slice(0, 12000)}`
+  return meta ? `${meta}\n\nCV:\n${cvBody.slice(0, 12000)}` : `CV:\n${cvBody.slice(0, 12000)}`
 }
 
 export async function analyzeJobMatch(cv: CvInput, job: MatchableJob) {
